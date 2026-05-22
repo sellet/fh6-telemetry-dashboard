@@ -1,20 +1,13 @@
 import type { HealthResponse, ServerStatus } from '../../../shared/api';
 import type { SessionManifest, SessionSummary } from '../../../shared/session';
+import type { MapSettings } from '../../../shared/mapDefaults';
+
+export type { MapSettings };
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} responded ${res.status}`);
   return (await res.json()) as T;
-}
-
-export interface MapSettings {
-  calibration: {
-    worldA: [number, number];
-    pixelA: [number, number];
-    worldB: [number, number];
-    pixelB: [number, number];
-  };
-  defaultView: { center: [number, number]; zoom: number } | null;
 }
 
 export const api = {

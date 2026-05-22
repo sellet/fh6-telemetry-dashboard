@@ -9,6 +9,8 @@ import { WsServer } from './ws/wsServer';
 import { SessionStore } from './session/sessionStore';
 import { SessionManager, recoverInterruptedSessions } from './session/sessionManager';
 import { ReplayEngine } from './replay/replayEngine';
+import { SettingsStore } from './map/settingsStore';
+import { TileDownloader } from './map/tileDownloader';
 import type { ServerStatus } from '../../shared/api';
 
 async function main(): Promise<void> {
@@ -35,6 +37,8 @@ async function main(): Promise<void> {
   const broadcaster = new LiveBroadcaster(bus, config.broadcastHz);
   const sessionStore = new SessionStore(config.sessionsDir, logger);
   const sessionManager = new SessionManager(config, logger, bus);
+  const settingsStore = new SettingsStore(config.settingsFile, logger);
+  const tileDownloader = new TileDownloader(config, logger);
 
   const getStatus = (): ServerStatus => {
     const udp = udpReceiver.getStats();
@@ -53,17 +57,12 @@ async function main(): Promise<void> {
         lockedSender: udp.lockedSender,
       },
       recording,
-      map: {
-        enabled: config.mapEnabled,
-        tilesAvailable: false,
-        tileDownload: 'idle',
-        tileCount: 0,
-      },
+      map: tileDownloader.getStatus(),
       allowDeleteSessions: config.allowDeleteSessions,
     };
   };
 
-  const http = createHttpServer(config, logger, { getStatus, sessionStore });
+  const http = createHttpServer(config, logger, { getStatus, sessionStore, settingsStore });
   const wsServer = new WsServer(http.server, logger, broadcaster, getStatus);
   wsServer.setReplayService(new ReplayEngine(logger, sessionStore));
 
@@ -73,6 +72,15 @@ async function main(): Promise<void> {
   logger.info(`HTTP server listening on :${config.webPort}`);
 
   await udpReceiver.start();
+
+  if (
+    config.mapEnabled &&
+    config.mapAutodownloadTiles &&
+    tileDownloader.getStatus().tileCount === 0
+  ) {
+    logger.info('no map tiles found — starting background tile download');
+    void tileDownloader.run();
+  }
 
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {

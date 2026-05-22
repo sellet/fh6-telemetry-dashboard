@@ -1,0 +1,211 @@
+import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { useTelemetryStore } from '../../state/telemetryStore';
+import { makeMapCrs } from '../../map/mapCrs';
+import { api } from '../../lib/api';
+import { FH6_MAP, type MapCalibration } from '../../../../shared/mapDefaults';
+
+interface CapturePoint {
+  world: [number, number] | null;
+  pixel: [number, number] | null;
+}
+
+type Slot = 'A' | 'B';
+
+interface MapCalibratorProps {
+  onClose: () => void;
+}
+
+export function MapCalibrator({ onClose }: MapCalibratorProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const tilesAvailable = useTelemetryStore((s) => s.status?.map.tilesAvailable ?? false);
+
+  const [pointA, setPointA] = useState<CapturePoint>({ world: null, pixel: null });
+  const [pointB, setPointB] = useState<CapturePoint>({ world: null, pixel: null });
+  const [activeSlot, setActiveSlot] = useState<Slot>('A');
+  const [status, setStatus] = useState<string | null>(null);
+
+  const activeSlotRef = useRef<Slot>('A');
+  activeSlotRef.current = activeSlot;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+
+    const map = L.map(el, {
+      crs: makeMapCrs(),
+      minZoom: 0,
+      maxZoom: 18,
+      attributionControl: false,
+    });
+    map.setView([0, 0], 10);
+
+    if (tilesAvailable) {
+      L.tileLayer('/maptiles/{z}/{x}/{y}.jpg', {
+        tileSize: FH6_MAP.tileSize,
+        minNativeZoom: FH6_MAP.minZoom,
+        maxNativeZoom: FH6_MAP.maxZoom,
+        noWrap: true,
+      }).addTo(map);
+    }
+
+    const markerA = L.circleMarker([0, 0], { radius: 7, color: '#22c55e', fillOpacity: 0.8 });
+    const markerB = L.circleMarker([0, 0], { radius: 7, color: '#3b82f6', fillOpacity: 0.8 });
+
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const projected = map.project(e.latlng, FH6_MAP.maxZoom);
+      const pixel: [number, number] = [projected.x, projected.y];
+      if (activeSlotRef.current === 'A') {
+        setPointA((p) => ({ ...p, pixel }));
+        markerA.setLatLng(e.latlng).addTo(map);
+      } else {
+        setPointB((p) => ({ ...p, pixel }));
+        markerB.setLatLng(e.latlng).addTo(map);
+      }
+    });
+
+    const sizeTimer = window.setTimeout(() => map.invalidateSize(), 120);
+    return () => {
+      window.clearTimeout(sizeTimer);
+      map.remove();
+    };
+  }, [tilesAvailable]);
+
+  const captureWorld = (slot: Slot): void => {
+    const frame = useTelemetryStore.getState().frame;
+    if (!frame) {
+      setStatus('No live telemetry — drive in-game to capture a world position.');
+      return;
+    }
+    const world: [number, number] = [frame.positionX, frame.positionZ];
+    if (slot === 'A') setPointA((p) => ({ ...p, world }));
+    else setPointB((p) => ({ ...p, world }));
+    setStatus(null);
+  };
+
+  const complete = (p: CapturePoint): boolean => p.world !== null && p.pixel !== null;
+  const canSave = complete(pointA) && complete(pointB);
+
+  const save = async (): Promise<void> => {
+    if (!canSave) return;
+    const calibration: MapCalibration = {
+      worldA: pointA.world as [number, number],
+      pixelA: pointA.pixel as [number, number],
+      worldB: pointB.world as [number, number],
+      pixelB: pointB.pixel as [number, number],
+    };
+    try {
+      await api.saveSettings({ calibration, defaultView: null });
+      setStatus('Calibration saved. Reopen the dashboard to apply.');
+      window.setTimeout(onClose, 1200);
+    } catch {
+      setStatus('Failed to save calibration.');
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-3 rounded-xl border border-cockpit-edge bg-cockpit-panel p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-100">Track Map Calibration</h2>
+          <button
+            onClick={onClose}
+            className="rounded border border-cockpit-edge px-3 py-1 text-sm text-slate-300 hover:bg-cockpit-bg"
+          >
+            Close
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-500">
+          For each point: drive to a recognisable landmark in-game and press “Capture world”, then
+          click that same landmark on the map below.
+        </p>
+
+        <div ref={containerRef} className="h-72 w-full overflow-hidden rounded bg-cockpit-bg" />
+
+        <div className="grid grid-cols-2 gap-3">
+          <SlotCard
+            slot="A"
+            point={pointA}
+            active={activeSlot === 'A'}
+            onActivate={() => setActiveSlot('A')}
+            onCaptureWorld={() => captureWorld('A')}
+          />
+          <SlotCard
+            slot="B"
+            point={pointB}
+            active={activeSlot === 'B'}
+            onActivate={() => setActiveSlot('B')}
+            onCaptureWorld={() => captureWorld('B')}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-amber-300">{status}</span>
+          <button
+            onClick={() => void save()}
+            disabled={!canSave}
+            className="rounded bg-cockpit-accent px-4 py-1.5 text-sm font-semibold text-black hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Save Calibration
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface SlotCardProps {
+  slot: Slot;
+  point: CapturePoint;
+  active: boolean;
+  onActivate: () => void;
+  onCaptureWorld: () => void;
+}
+
+function SlotCard({ slot, point, active, onActivate, onCaptureWorld }: SlotCardProps) {
+  const fmt = (p: [number, number] | null): string =>
+    p ? `${p[0].toFixed(1)}, ${p[1].toFixed(1)}` : '—';
+
+  return (
+    <div
+      onClick={onActivate}
+      className={`cursor-pointer rounded-lg border p-2.5 ${
+        active ? 'border-cockpit-accent bg-cockpit-bg' : 'border-cockpit-edge bg-cockpit-bg/50'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-slate-200">Point {slot}</span>
+        {active && (
+          <span className="text-[10px] uppercase text-cockpit-accent">click map to set</span>
+        )}
+      </div>
+      <dl className="mt-1.5 space-y-0.5 font-mono text-[11px] text-slate-400">
+        <div className="flex justify-between">
+          <dt>world</dt>
+          <dd>{fmt(point.world)}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt>pixel</dt>
+          <dd>{fmt(point.pixel)}</dd>
+        </div>
+      </dl>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onCaptureWorld();
+        }}
+        className="mt-2 w-full rounded border border-cockpit-edge px-2 py-1 text-xs text-slate-300 hover:bg-cockpit-panel"
+      >
+        Capture world
+      </button>
+    </div>
+  );
+}

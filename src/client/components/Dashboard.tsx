@@ -10,6 +10,7 @@ import { SuspensionPanel } from './cockpit/SuspensionPanel';
 import { LapInfo } from './cockpit/LapInfo';
 import { VehicleStats } from './cockpit/VehicleStats';
 import { RollingChart } from './charts/RollingChart';
+import { TrackMap } from './map/TrackMap';
 import { MPS_TO_KMH } from '../lib/format';
 
 function WaitingOverlay({ message }: { message: string }) {
@@ -58,6 +59,10 @@ export function Dashboard() {
         <TirePanel />
         <SuspensionPanel />
         <VehicleStats />
+      </div>
+
+      <div className="mt-3">
+        <TrackMap />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">

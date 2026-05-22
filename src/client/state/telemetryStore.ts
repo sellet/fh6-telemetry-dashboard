@@ -25,6 +25,13 @@ export interface History {
   brake: number[];
 }
 
+/** World [x, z] positions for the track map; capped, distance-sampled. */
+export type TrackPath = Array<[number, number]>;
+
+const TRACK_MAX_POINTS = 8000;
+/** Minimum movement (m) before a new track point is recorded. */
+const TRACK_MIN_STEP = 2;
+
 const emptyHistory = (): History => ({ speed: [], rpm: [], throttle: [], brake: [] });
 
 const emptyReplay = (): ReplayInfo => ({
@@ -51,6 +58,7 @@ interface TelemetryStore {
   status: ServerStatus | null;
   replay: ReplayInfo;
   history: History;
+  trackPath: TrackPath;
   lastFrameAt: number;
   send: (msg: ClientMessage) => void;
 
@@ -60,7 +68,18 @@ interface TelemetryStore {
   setStatus: (status: ServerStatus) => void;
   patchReplay: (patch: Partial<ReplayInfo>) => void;
   resetReplay: () => void;
+  clearTrack: () => void;
   setSend: (send: (msg: ClientMessage) => void) => void;
+}
+
+function nextTrackPath(path: TrackPath, x: number, z: number): TrackPath {
+  const last = path[path.length - 1];
+  if (last && Math.hypot(x - last[0], z - last[1]) < TRACK_MIN_STEP) {
+    return path;
+  }
+  const next = path.length >= TRACK_MAX_POINTS ? path.slice(1) : path.slice();
+  next.push([x, z]);
+  return next;
 }
 
 export const useTelemetryStore = create<TelemetryStore>((set) => ({
@@ -71,6 +90,7 @@ export const useTelemetryStore = create<TelemetryStore>((set) => ({
   status: null,
   replay: emptyReplay(),
   history: emptyHistory(),
+  trackPath: [],
   lastFrameAt: 0,
   send: () => {},
 
@@ -86,6 +106,7 @@ export const useTelemetryStore = create<TelemetryStore>((set) => ({
         throttle: pushCapped(state.history.throttle, frame.accelerator),
         brake: pushCapped(state.history.brake, frame.brake),
       },
+      trackPath: nextTrackPath(state.trackPath, frame.positionX, frame.positionZ),
     })),
 
   setConnection: (connection) => set({ connection }),
@@ -94,7 +115,9 @@ export const useTelemetryStore = create<TelemetryStore>((set) => ({
 
   patchReplay: (patch) => set((state) => ({ replay: { ...state.replay, ...patch } })),
 
-  resetReplay: () => set({ replay: emptyReplay(), history: emptyHistory() }),
+  resetReplay: () => set({ replay: emptyReplay(), history: emptyHistory(), trackPath: [] }),
+
+  clearTrack: () => set({ trackPath: [] }),
 
   setSend: (send) => set({ send }),
 }));

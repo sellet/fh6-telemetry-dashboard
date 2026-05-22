@@ -33,6 +33,7 @@ export function useTelemetrySocket(): void {
           store.setStatus(msg.status);
           break;
         case 'replay.state':
+          if (store.replay.sessionId !== msg.sessionId) store.clearTrack();
           store.patchReplay({
             state: msg.state,
             sessionId: msg.sessionId,
