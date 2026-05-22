@@ -19,7 +19,7 @@ interface MapCalibratorProps {
 
 export function MapCalibrator({ onClose }: MapCalibratorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const tilesAvailable = useTelemetryStore((s) => s.status?.map.tilesAvailable ?? false);
+  const mapEnabled = useTelemetryStore((s) => s.status?.map.enabled ?? true);
 
   const [pointA, setPointA] = useState<CapturePoint>({ world: null, pixel: null });
   const [pointB, setPointB] = useState<CapturePoint>({ world: null, pixel: null });
@@ -41,7 +41,7 @@ export function MapCalibrator({ onClose }: MapCalibratorProps) {
     });
     map.setView([0, 0], 10);
 
-    if (tilesAvailable) {
+    if (mapEnabled) {
       L.tileLayer('/maptiles/{z}/{x}/{y}.jpg', {
         tileSize: FH6_MAP.tileSize,
         minNativeZoom: FH6_MAP.minZoom,
@@ -70,7 +70,7 @@ export function MapCalibrator({ onClose }: MapCalibratorProps) {
       window.clearTimeout(sizeTimer);
       map.remove();
     };
-  }, [tilesAvailable]);
+  }, [mapEnabled]);
 
   const captureWorld = (slot: Slot): void => {
     const frame = useTelemetryStore.getState().frame;

@@ -1,24 +1,25 @@
 /**
- * Dev / ops tool: download the MapGenie FH6 map tiles into the data volume.
+ * Dev / ops tool: bulk-download the FH6 map tiles into the data volume for
+ * offline use.
  *
  *   npm run download-tiles
  *
- * Normally the server downloads tiles automatically on first boot
- * (MAP_AUTODOWNLOAD_TILES=true); run this to pre-seed or refresh them.
+ * Tiles are normally cached lazily as the dashboard map is viewed; run this to
+ * pre-cache the whole map.
  */
 import fs from 'node:fs';
 import { loadConfig } from '../config';
 import { createLogger } from '../logger';
-import { TileDownloader } from '../map/tileDownloader';
+import { MapTileService } from '../map/tileService';
 
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
   fs.mkdirSync(config.mapTilesDir, { recursive: true });
 
-  const downloader = new TileDownloader(config, logger);
-  await downloader.run();
-  logger.info(downloader.getStatus(), 'tile download complete');
+  const tiles = new MapTileService(config, logger);
+  await tiles.downloadAll();
+  logger.info(tiles.getStatus(), 'bulk tile download complete');
 }
 
 main().catch((err: unknown) => {

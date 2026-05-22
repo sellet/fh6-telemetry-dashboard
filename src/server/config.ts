@@ -55,7 +55,9 @@ export function loadConfig(): Config {
     logLevel: envStr('LOG_LEVEL', 'info'),
     broadcastHz: Math.min(60, Math.max(1, envInt('BROADCAST_HZ', 30))),
     mapEnabled: envBool('MAP_ENABLED', true),
-    mapAutodownloadTiles: envBool('MAP_AUTODOWNLOAD_TILES', true),
+    // Tiles are cached lazily on demand; this only controls an optional
+    // full bulk pre-download on startup.
+    mapAutodownloadTiles: envBool('MAP_AUTODOWNLOAD_TILES', false),
     mapTilesUrl: envStr(
       'MAP_TILES_URL',
       'https://tiles.mapgenie.io/games/forza-horizon-6/one/default-v2/{z}/{x}/{y}.jpg',

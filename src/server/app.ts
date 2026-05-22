@@ -10,7 +10,7 @@ import { SessionStore } from './session/sessionStore';
 import { SessionManager, recoverInterruptedSessions } from './session/sessionManager';
 import { ReplayEngine } from './replay/replayEngine';
 import { SettingsStore } from './map/settingsStore';
-import { TileDownloader } from './map/tileDownloader';
+import { MapTileService } from './map/tileService';
 import type { ServerStatus } from '../../shared/api';
 
 export interface ServerHandle {
@@ -45,7 +45,7 @@ export async function startServer(config: Config, logger: Logger): Promise<Serve
   const sessionStore = new SessionStore(config.sessionsDir, logger);
   const sessionManager = new SessionManager(config, logger, bus);
   const settingsStore = new SettingsStore(config.settingsFile, logger);
-  const tileDownloader = new TileDownloader(config, logger);
+  const tileService = new MapTileService(config, logger);
 
   const getStatus = (): ServerStatus => {
     const udp = udpReceiver.getStats();
@@ -63,12 +63,17 @@ export async function startServer(config: Config, logger: Logger): Promise<Serve
         lockedSender: udp.lockedSender,
       },
       recording: sessionManager.getStatus(),
-      map: tileDownloader.getStatus(),
+      map: tileService.getStatus(),
       allowDeleteSessions: config.allowDeleteSessions,
     };
   };
 
-  const http = createHttpServer(config, logger, { getStatus, sessionStore, settingsStore });
+  const http = createHttpServer(config, logger, {
+    getStatus,
+    sessionStore,
+    settingsStore,
+    tileService,
+  });
   const wsServer = new WsServer(http.server, logger, broadcaster, getStatus);
   wsServer.setReplayService(new ReplayEngine(logger, sessionStore));
 
@@ -79,13 +84,11 @@ export async function startServer(config: Config, logger: Logger): Promise<Serve
 
   await udpReceiver.start();
 
-  if (
-    config.mapEnabled &&
-    config.mapAutodownloadTiles &&
-    tileDownloader.getStatus().tileCount === 0
-  ) {
-    logger.info('no map tiles found — starting background tile download');
-    void tileDownloader.run();
+  // Tiles are normally cached lazily as the map is viewed; this optionally
+  // runs a full offline pre-download on startup.
+  if (config.mapEnabled && config.mapAutodownloadTiles) {
+    logger.info('MAP_AUTODOWNLOAD_TILES enabled — starting background bulk tile download');
+    void tileService.downloadAll();
   }
 
   return {

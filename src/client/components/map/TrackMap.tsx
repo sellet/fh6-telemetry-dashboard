@@ -17,8 +17,11 @@ const CAR_ICON_SVG =
 
 export function TrackMap() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const tilesAvailable = useTelemetryStore((s) => s.status?.map.tilesAvailable ?? false);
+  const mapEnabled = useTelemetryStore((s) => s.status?.map.enabled ?? true);
+  const tileCount = useTelemetryStore((s) => s.status?.map.tileCount ?? 0);
+  const downloadState = useTelemetryStore((s) => s.status?.map.tileDownload ?? 'idle');
   const [calibrating, setCalibrating] = useState(false);
+  const [requested, setRequested] = useState(false);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -33,12 +36,14 @@ export function TrackMap() {
     });
     map.setView([0, 0], 10);
 
-    if (tilesAvailable) {
+    if (mapEnabled) {
+      // Tiles are proxied and cached lazily by the server on first request.
       L.tileLayer('/maptiles/{z}/{x}/{y}.jpg', {
         tileSize: FH6_MAP.tileSize,
         minNativeZoom: FH6_MAP.minZoom,
         maxNativeZoom: FH6_MAP.maxZoom,
         noWrap: true,
+        updateWhenIdle: false,
       }).addTo(map);
     }
 
@@ -99,22 +104,44 @@ export function TrackMap() {
       unsubscribe();
       map.remove();
     };
-  }, [tilesAvailable]);
+  }, [mapEnabled]);
+
+  const downloading = downloadState === 'downloading';
+  const startDownload = async (): Promise<void> => {
+    setRequested(true);
+    try {
+      await api.downloadMapTiles();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <Panel title="Track Map">
       <div className="relative">
         <div ref={containerRef} className="h-80 w-full overflow-hidden rounded bg-cockpit-bg" />
-        {!tilesAvailable && (
-          <span className="pointer-events-none absolute bottom-2 left-2 z-[600] rounded bg-cockpit-panel/80 px-2 py-0.5 text-[10px] text-slate-500">
-            no map tiles — showing trace only
-          </span>
-        )}
         <button
           onClick={() => setCalibrating(true)}
           className="absolute right-2 top-2 z-[600] rounded border border-cockpit-edge bg-cockpit-panel/90 px-2 py-1 text-xs text-slate-300 hover:bg-cockpit-bg"
         >
           Calibrate
+        </button>
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+        <span>
+          {tileCount.toLocaleString()} map tiles cached
+          {mapEnabled ? ' · tiles load as you pan the map' : ' · map disabled'}
+        </span>
+        <button
+          onClick={() => void startDownload()}
+          disabled={!mapEnabled || downloading}
+          className="rounded border border-cockpit-edge px-2.5 py-1 text-slate-300 hover:bg-cockpit-bg disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {downloading
+            ? 'Downloading all tiles…'
+            : requested && downloadState === 'complete'
+              ? 'Download complete'
+              : 'Download all tiles'}
         </button>
       </div>
       {calibrating && <MapCalibrator onClose={() => setCalibrating(false)} />}

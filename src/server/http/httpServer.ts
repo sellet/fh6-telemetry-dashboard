@@ -7,15 +7,18 @@ import type { Logger } from '../logger';
 import type { ServerStatus } from '../../../shared/api';
 import type { SessionStore } from '../session/sessionStore';
 import type { SettingsStore } from '../map/settingsStore';
+import type { MapTileService } from '../map/tileService';
 import { registerHealthRoutes } from './routes/health';
 import { registerStatusRoutes } from './routes/status';
 import { registerSessionRoutes } from './routes/sessions';
 import { registerSettingsRoutes } from './routes/settings';
+import { registerMapTileRoutes } from './routes/maptiles';
 
 export interface HttpDeps {
   getStatus: () => ServerStatus;
   sessionStore: SessionStore;
   settingsStore: SettingsStore;
+  tileService: MapTileService;
 }
 
 export function createHttpServer(config: Config, logger: Logger, deps: HttpDeps): FastifyInstance {
@@ -31,13 +34,7 @@ export function createHttpServer(config: Config, logger: Logger, deps: HttpDeps)
   registerStatusRoutes(app, deps.getStatus);
   registerSessionRoutes(app, config, deps.sessionStore);
   registerSettingsRoutes(app, deps.settingsStore);
-
-  // Map tiles are downloaded into the data volume at runtime (M7).
-  app.register(fastifyStatic, {
-    root: config.mapTilesDir,
-    prefix: '/maptiles/',
-    decorateReply: false,
-  });
+  registerMapTileRoutes(app, deps.tileService);
 
   const clientDir = path.resolve(process.cwd(), 'dist/client');
   if (fs.existsSync(path.join(clientDir, 'index.html'))) {

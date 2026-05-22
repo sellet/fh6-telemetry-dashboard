@@ -30,4 +30,9 @@ export const api = {
     });
     if (!res.ok) throw new Error(`failed to save settings (${res.status})`);
   },
+
+  async downloadMapTiles(): Promise<void> {
+    const res = await fetch('/api/maptiles/download', { method: 'POST' });
+    if (!res.ok) throw new Error(`failed to start tile download (${res.status})`);
+  },
 };

@@ -15,8 +15,9 @@ Forza Horizon 6  ──UDP──▶  Container  ──▶  Live dashboard (WebSo
 
 - **Live telemetry** — speed, RPM, gear, pedals, steering, G-force, tyres,
   suspension, lap/race data, vehicle stats, and rolling charts.
-- **Track map** — racing line and heading-aware car marker on a Leaflet map,
-  with a tile-less vector-trace fallback.
+- **Track map** — racing line and heading-aware car marker on a Leaflet map.
+  Map tiles are cached lazily as you view the map; a tile-less vector trace is
+  shown wherever tiles are unavailable.
 - **Automatic recording** — every session is written to `/data/sessions` as
   JSON Lines, with a manifest and computed statistics.
 - **Replay** — browse recorded sessions and replay them in the dashboard with
@@ -93,22 +94,24 @@ All settings are environment variables (see [.env.example](.env.example)):
 | `LOG_LEVEL`                  | `info`    | `trace`/`debug`/`info`/`warn`/`error`/`silent`     |
 | `BROADCAST_HZ`               | `30`      | Live WebSocket rate (recording stays at full rate) |
 | `MAP_ENABLED`                | `true`    | Enable the track map                               |
-| `MAP_AUTODOWNLOAD_TILES`     | `true`    | Download map tiles on first start                  |
+| `MAP_AUTODOWNLOAD_TILES`     | `false`   | Bulk pre-download all tiles on startup             |
 | `MAP_TILES_URL`              | MapGenie  | Tile URL template (`{z}/{x}/{y}`)                  |
 | `MAX_SESSION_LIST_ITEMS`     | `500`     | Max sessions returned by the API                   |
 
 ## API
 
-| Method   | Path                | Description                                      |
-| -------- | ------------------- | ------------------------------------------------ |
-| `GET`    | `/api/health`       | Health check                                     |
-| `GET`    | `/api/status`       | Runtime status (UDP, recording, map)             |
-| `GET`    | `/api/sessions`     | List recorded sessions                           |
-| `GET`    | `/api/sessions/:id` | Session manifest                                 |
-| `DELETE` | `/api/sessions/:id` | Delete a session (needs `ALLOW_DELETE_SESSIONS`) |
-| `GET`    | `/api/settings`     | Map calibration settings                         |
-| `PUT`    | `/api/settings`     | Update map calibration                           |
-| `WS`     | `/ws`               | Live telemetry + replay control                  |
+| Method   | Path                     | Description                                      |
+| -------- | ------------------------ | ------------------------------------------------ |
+| `GET`    | `/api/health`            | Health check                                     |
+| `GET`    | `/api/status`            | Runtime status (UDP, recording, map)             |
+| `GET`    | `/api/sessions`          | List recorded sessions                           |
+| `GET`    | `/api/sessions/:id`      | Session manifest                                 |
+| `DELETE` | `/api/sessions/:id`      | Delete a session (needs `ALLOW_DELETE_SESSIONS`) |
+| `GET`    | `/api/settings`          | Map calibration settings                         |
+| `PUT`    | `/api/settings`          | Update map calibration                           |
+| `GET`    | `/maptiles/:z/:x/:y`     | Map tile (cached lazily from upstream)           |
+| `POST`   | `/api/maptiles/download` | Bulk-download all map tiles                      |
+| `WS`     | `/ws`                    | Live telemetry + replay control                  |
 
 ## Development
 
@@ -137,10 +140,13 @@ npm run download-tiles  # pre-download the map tiles
   assembled from the official documentation plus FH5 / Forza Motorsport
   community sources, and is partly inferred. The parser is length-tolerant.
   Run `npm run capture` against a real game to verify and correct the offsets.
-- **Map tiles** are downloaded at runtime from MapGenie into your `/data`
-  volume; they are not bundled in the image. The tiles are extracted game
-  assets — use of the map feature is at the operator's discretion. The track
-  map falls back to a tile-less vector trace when tiles are unavailable.
+- **Map tiles** are fetched from MapGenie and cached into your `/data` volume
+  on demand — each tile is downloaded the first time the map shows it. Use the
+  **Download all tiles** button (or `MAP_AUTODOWNLOAD_TILES=true`) to pre-cache
+  the whole map for offline use. Tiles are not bundled in the image; they are
+  extracted game assets, so use of the map feature is at the operator's
+  discretion. The track map falls back to a tile-less vector trace when tiles
+  are unavailable.
 
 ## License
 
