@@ -1,0 +1,5 @@
+node_modules
+dist
+coverage
+fh6-data
+package-lock.json

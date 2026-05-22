@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.env
+fh6-data/
+test/fixtures/packet.bin
