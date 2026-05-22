@@ -5,11 +5,14 @@ import fastifyStatic from '@fastify/static';
 import type { Config } from '../config';
 import type { Logger } from '../logger';
 import type { ServerStatus } from '../../../shared/api';
+import type { SessionStore } from '../session/sessionStore';
 import { registerHealthRoutes } from './routes/health';
 import { registerStatusRoutes } from './routes/status';
+import { registerSessionRoutes } from './routes/sessions';
 
 export interface HttpDeps {
   getStatus: () => ServerStatus;
+  sessionStore: SessionStore;
 }
 
 export function createHttpServer(config: Config, logger: Logger, deps: HttpDeps): FastifyInstance {
@@ -23,6 +26,7 @@ export function createHttpServer(config: Config, logger: Logger, deps: HttpDeps)
 
   registerHealthRoutes(app);
   registerStatusRoutes(app, deps.getStatus);
+  registerSessionRoutes(app, config, deps.sessionStore);
 
   // Map tiles are downloaded into the data volume at runtime (M7).
   app.register(fastifyStatic, {

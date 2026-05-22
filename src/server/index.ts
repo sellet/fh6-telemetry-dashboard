@@ -6,6 +6,8 @@ import { TelemetryBus } from './core/telemetryBus';
 import { UdpReceiver } from './telemetry/udpReceiver';
 import { LiveBroadcaster } from './ws/broadcaster';
 import { WsServer } from './ws/wsServer';
+import { SessionStore } from './session/sessionStore';
+import { SessionManager, recoverInterruptedSessions } from './session/sessionManager';
 import type { ServerStatus } from '../../shared/api';
 
 async function main(): Promise<void> {
@@ -25,13 +27,18 @@ async function main(): Promise<void> {
   fs.mkdirSync(config.sessionsDir, { recursive: true });
   fs.mkdirSync(config.mapTilesDir, { recursive: true });
 
+  await recoverInterruptedSessions(config, logger);
+
   const bus = new TelemetryBus();
   const udpReceiver = new UdpReceiver(config, logger, bus);
   const broadcaster = new LiveBroadcaster(bus, config.broadcastHz);
+  const sessionStore = new SessionStore(config.sessionsDir, logger);
+  const sessionManager = new SessionManager(config, logger, bus);
 
   const getStatus = (): ServerStatus => {
     const udp = udpReceiver.getStats();
     const lastPacketMs = udpReceiver.getLastPacketTime();
+    const recording = sessionManager.getStatus();
     return {
       mode: 'live',
       udp: {
@@ -44,7 +51,7 @@ async function main(): Promise<void> {
         receivingPackets: lastPacketMs > 0 && Date.now() - lastPacketMs < 2000,
         lockedSender: udp.lockedSender,
       },
-      recording: { active: false, sessionId: null, frameCount: 0, droppedFrames: 0, error: null },
+      recording,
       map: {
         enabled: config.mapEnabled,
         tilesAvailable: false,
@@ -55,10 +62,11 @@ async function main(): Promise<void> {
     };
   };
 
-  const http = createHttpServer(config, logger, { getStatus });
+  const http = createHttpServer(config, logger, { getStatus, sessionStore });
   const wsServer = new WsServer(http.server, logger, broadcaster, getStatus);
 
   broadcaster.start();
+  sessionManager.start();
   await http.listen({ host: '0.0.0.0', port: config.webPort });
   logger.info(`HTTP server listening on :${config.webPort}`);
 
@@ -71,6 +79,7 @@ async function main(): Promise<void> {
     logger.info(`${signal} received — shutting down`);
     broadcaster.stop();
     await udpReceiver.stop();
+    await sessionManager.shutdown();
     await wsServer.close();
     await http.close();
     process.exit(0);
