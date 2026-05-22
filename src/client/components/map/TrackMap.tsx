@@ -17,6 +17,7 @@ const CAR_ICON_SVG =
 
 export function TrackMap() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
   const mapEnabled = useTelemetryStore((s) => s.status?.map.enabled ?? true);
   const tileCount = useTelemetryStore((s) => s.status?.map.tileCount ?? 0);
   const downloadState = useTelemetryStore((s) => s.status?.map.tileDownload ?? 'idle');
@@ -38,13 +39,15 @@ export function TrackMap() {
 
     if (mapEnabled) {
       // Tiles are proxied and cached lazily by the server on first request.
-      L.tileLayer('/maptiles/{z}/{x}/{y}.jpg', {
+      const tileLayer = L.tileLayer('/maptiles/{z}/{x}/{y}.jpg', {
         tileSize: FH6_MAP.tileSize,
         minNativeZoom: FH6_MAP.minZoom,
         maxNativeZoom: FH6_MAP.maxZoom,
         noWrap: true,
         updateWhenIdle: false,
-      }).addTo(map);
+      });
+      tileLayer.addTo(map);
+      tileLayerRef.current = tileLayer;
     }
 
     const line = L.polyline([], { color: '#ff6b1a', weight: 3, opacity: 0.9 }).addTo(map);
@@ -102,6 +105,7 @@ export function TrackMap() {
     return () => {
       window.clearTimeout(sizeTimer);
       unsubscribe();
+      tileLayerRef.current = null;
       map.remove();
     };
   }, [mapEnabled]);
@@ -114,6 +118,16 @@ export function TrackMap() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // Forget server-side failed tiles, then re-request the visible ones.
+  const refreshTiles = async (): Promise<void> => {
+    try {
+      await api.refreshMapTiles();
+    } catch (err) {
+      console.error(err);
+    }
+    tileLayerRef.current?.redraw();
   };
 
   return (
@@ -132,17 +146,27 @@ export function TrackMap() {
           {tileCount.toLocaleString()} map tiles cached
           {mapEnabled ? ' · tiles load as you pan the map' : ' · map disabled'}
         </span>
-        <button
-          onClick={() => void startDownload()}
-          disabled={!mapEnabled || downloading}
-          className="rounded border border-cockpit-edge px-2.5 py-1 text-slate-300 hover:bg-cockpit-bg disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {downloading
-            ? 'Downloading all tiles…'
-            : requested && downloadState === 'complete'
-              ? 'Download complete'
-              : 'Download all tiles'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void refreshTiles()}
+            disabled={!mapEnabled}
+            title="Re-fetch missing tiles in view"
+            className="rounded border border-cockpit-edge px-2 py-1 text-slate-300 hover:bg-cockpit-bg disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ⟳ Refresh
+          </button>
+          <button
+            onClick={() => void startDownload()}
+            disabled={!mapEnabled || downloading}
+            className="rounded border border-cockpit-edge px-2.5 py-1 text-slate-300 hover:bg-cockpit-bg disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {downloading
+              ? 'Downloading all tiles…'
+              : requested && downloadState === 'complete'
+                ? 'Download complete'
+                : 'Download all tiles'}
+          </button>
+        </div>
       </div>
       {calibrating && <MapCalibrator onClose={() => setCalibrating(false)} />}
     </Panel>

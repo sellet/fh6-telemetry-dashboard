@@ -32,4 +32,10 @@ export function registerMapTileRoutes(app: FastifyInstance, tiles: MapTileServic
     void tiles.downloadAll();
     return { started: true, status: tiles.getStatus() };
   });
+
+  // Forget failed tiles so the map immediately re-requests missing ones.
+  app.post('/api/maptiles/refresh', () => {
+    tiles.clearMissing();
+    return { ok: true };
+  });
 }

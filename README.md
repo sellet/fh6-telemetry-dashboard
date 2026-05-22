@@ -111,6 +111,7 @@ All settings are environment variables (see [.env.example](.env.example)):
 | `PUT`    | `/api/settings`          | Update map calibration                           |
 | `GET`    | `/maptiles/:z/:x/:y`     | Map tile (cached lazily from upstream)           |
 | `POST`   | `/api/maptiles/download` | Bulk-download all map tiles                      |
+| `POST`   | `/api/maptiles/refresh`  | Forget failed tiles so missing ones retry        |
 | `WS`     | `/ws`                    | Live telemetry + replay control                  |
 
 ## Development
@@ -141,12 +142,14 @@ npm run download-tiles  # pre-download the map tiles
   community sources, and is partly inferred. The parser is length-tolerant.
   Run `npm run capture` against a real game to verify and correct the offsets.
 - **Map tiles** are fetched from MapGenie and cached into your `/data` volume
-  on demand — each tile is downloaded the first time the map shows it. Use the
-  **Download all tiles** button (or `MAP_AUTODOWNLOAD_TILES=true`) to pre-cache
-  the whole map for offline use. Tiles are not bundled in the image; they are
-  extracted game assets, so use of the map feature is at the operator's
-  discretion. The track map falls back to a tile-less vector trace when tiles
-  are unavailable.
+  on demand — each tile is downloaded the first time the map shows it.
+  Downloads are size-checked and retried; a corrupt/too-small response is never
+  cached, and a tile that keeps failing is retried automatically when you
+  return to that area or via the **⟳ Refresh** button. Use the **Download all
+  tiles** button (or `MAP_AUTODOWNLOAD_TILES=true`) to pre-cache the whole map
+  for offline use. Tiles are not bundled in the image; they are extracted game
+  assets, so use of the map feature is at the operator's discretion. The track
+  map falls back to a tile-less vector trace when tiles are unavailable.
 
 ## License
 

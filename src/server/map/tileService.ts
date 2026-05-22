@@ -10,6 +10,19 @@ const MAX_BULK_TILES = 30_000;
 const BULK_CONCURRENCY = 8;
 const FETCH_TIMEOUT_MS = 8000;
 
+/** Smallest plausible real tile — anything below this is an error placeholder. */
+const MIN_TILE_BYTES = 256;
+/** Attempts per tile before giving up (1 initial + retries). */
+const MAX_FETCH_ATTEMPTS = 3;
+/** How long a failed tile is skipped before it is retried on demand. */
+const NEGATIVE_CACHE_TTL_MS = 3 * 60 * 1000;
+const MAX_NEGATIVE_ENTRIES = 20_000;
+
+/** A real JPEG tile starts with the SOI marker FF D8 and is not tiny. */
+function isValidTile(buf: Buffer): boolean {
+  return buf.length >= MIN_TILE_BYTES && buf[0] === 0xff && buf[1] === 0xd8;
+}
+
 export interface TileStatus {
   enabled: boolean;
   tilesAvailable: boolean;
@@ -20,13 +33,18 @@ export interface TileStatus {
 /**
  * Serves map tiles with lazy, on-demand caching: a tile is fetched from the
  * upstream provider and cached to the data volume the first time it is
- * requested (i.e. as the player drives into that area). A bulk flood-fill
- * download is also available for offline pre-caching.
+ * requested (i.e. as the player drives into that area).
+ *
+ * Downloads are size/format-checked and retried; an invalid response is never
+ * written to the cache. Tiles that keep failing are remembered for a short
+ * time only, so they retry automatically when the player returns — or
+ * immediately when the dashboard's refresh button clears that memory.
  */
 export class MapTileService {
   private bulkState: TileDownloadState = 'idle';
   private tileCount: number;
-  private readonly missing = new Set<string>();
+  /** key -> timestamp until which the tile is treated as missing. */
+  private readonly missing = new Map<string, number>();
   private readonly inFlight = new Map<string, Promise<Buffer | null>>();
 
   constructor(
@@ -60,7 +78,12 @@ export class MapTileService {
 
     if (!this.config.mapEnabled) return null;
     const key = `${z}/${x}/${y}`;
-    if (this.missing.has(key)) return null;
+
+    const blockedUntil = this.missing.get(key);
+    if (blockedUntil !== undefined) {
+      if (blockedUntil > Date.now()) return null;
+      this.missing.delete(key); // TTL expired — allow a fresh attempt
+    }
 
     const pending = this.inFlight.get(key);
     if (pending) return pending;
@@ -74,6 +97,11 @@ export class MapTileService {
     }
   }
 
+  /** Forget all negatively-cached tiles so missing ones retry immediately. */
+  clearMissing(): void {
+    this.missing.clear();
+  }
+
   private async fetchAndCache(
     z: number,
     x: number,
@@ -83,7 +111,10 @@ export class MapTileService {
   ): Promise<Buffer | null> {
     const buf = await this.fetchUpstream(z, x, y);
     if (!buf) {
-      this.missing.add(key);
+      // Do not cache a bad file; remember the miss briefly so it is retried
+      // when the player comes back (or on a manual refresh).
+      if (this.missing.size >= MAX_NEGATIVE_ENTRIES) this.missing.clear();
+      this.missing.set(key, Date.now() + NEGATIVE_CACHE_TTL_MS);
       return null;
     }
     try {
@@ -96,19 +127,27 @@ export class MapTileService {
     return buf;
   }
 
+  /** Fetch one tile, validating its size and retrying a corrupt download. */
   private async fetchUpstream(z: number, x: number, y: number): Promise<Buffer | null> {
     const url = this.config.mapTilesUrl
       .replace('{z}', String(z))
       .replace('{x}', String(x))
       .replace('{y}', String(y));
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-      if (!res.ok) return null;
-      const buf = Buffer.from(await res.arrayBuffer());
-      return buf.length > 0 ? buf : null;
-    } catch {
-      return null;
+
+    for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt += 1) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        if (!res.ok) return null; // genuine 404/403 — map edge, no point retrying
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (isValidTile(buf)) return buf;
+        this.logger.debug(
+          `tile ${z}/${x}/${y} response too small (${buf.length} bytes), attempt ${attempt}/${MAX_FETCH_ATTEMPTS}`,
+        );
+      } catch {
+        // timeout or network error — retry
+      }
     }
+    return null;
   }
 
   /** Flood-fill the whole reachable tile pyramid for offline use. */

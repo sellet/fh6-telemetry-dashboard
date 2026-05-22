@@ -35,4 +35,9 @@ export const api = {
     const res = await fetch('/api/maptiles/download', { method: 'POST' });
     if (!res.ok) throw new Error(`failed to start tile download (${res.status})`);
   },
+
+  async refreshMapTiles(): Promise<void> {
+    const res = await fetch('/api/maptiles/refresh', { method: 'POST' });
+    if (!res.ok) throw new Error(`failed to refresh tiles (${res.status})`);
+  },
 };
