@@ -51,7 +51,93 @@ export class MapTileService {
     private readonly config: Config,
     private readonly logger: Logger,
   ) {
+    this.migrateLayoutIfNeeded();
     this.tileCount = this.countTiles(config.mapTilesDir);
+  }
+
+  /**
+   * Earlier versions sent the upstream URL as `{z}/{x}/{y}` instead of the
+   * `{z}/{y}/{x}` MapGenie actually expects, so each cached file ended up at
+   * the transposed path. Swap x/y in every cached tile path once, then write
+   * a marker so this never runs again.
+   */
+  private migrateLayoutIfNeeded(): void {
+    const marker = path.join(this.config.mapTilesDir, '.layout');
+    if (fs.existsSync(marker)) return;
+
+    let zooms: string[];
+    try {
+      zooms = fs.readdirSync(this.config.mapTilesDir).filter((n) => /^\d+$/.test(n));
+    } catch {
+      return;
+    }
+
+    if (zooms.length === 0) {
+      try {
+        fs.mkdirSync(this.config.mapTilesDir, { recursive: true });
+        fs.writeFileSync(marker, 'yx-v1\n');
+      } catch {
+        /* nothing to migrate, no marker — try again next boot */
+      }
+      return;
+    }
+
+    const moves: Array<{ from: string; to: string }> = [];
+    for (const zName of zooms) {
+      const zDir = path.join(this.config.mapTilesDir, zName);
+      for (const xName of fs.readdirSync(zDir)) {
+        const xDir = path.join(zDir, xName);
+        let stat;
+        try {
+          stat = fs.statSync(xDir);
+        } catch {
+          continue;
+        }
+        if (!stat.isDirectory() || !/^\d+$/.test(xName)) continue;
+        for (const yFile of fs.readdirSync(xDir)) {
+          const match = yFile.match(/^(\d+)\.jpg$/);
+          if (!match) continue;
+          moves.push({
+            from: path.join(xDir, yFile),
+            to: path.join(zDir, match[1], `${xName}.jpg`),
+          });
+        }
+      }
+    }
+
+    if (moves.length === 0) {
+      fs.writeFileSync(marker, 'yx-v1\n');
+      return;
+    }
+
+    this.logger.info(`migrating ${moves.length} cached map tiles to corrected y/x layout`);
+
+    // Two-phase rename so (X,Y) and (Y,X) swapping cannot collide.
+    for (const m of moves) {
+      fs.mkdirSync(path.dirname(m.to), { recursive: true });
+      fs.renameSync(m.from, m.to + '.__migrating');
+    }
+    for (const m of moves) {
+      fs.renameSync(m.to + '.__migrating', m.to);
+    }
+
+    // Remove now-empty source directories.
+    for (const zName of zooms) {
+      const zDir = path.join(this.config.mapTilesDir, zName);
+      for (const sub of fs.readdirSync(zDir)) {
+        const subDir = path.join(zDir, sub);
+        try {
+          if (fs.statSync(subDir).isDirectory() && fs.readdirSync(subDir).length === 0) {
+            fs.rmdirSync(subDir);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    fs.writeFileSync(marker, 'yx-v1\n');
+    this.logger.info('tile layout migration complete');
   }
 
   getStatus(): TileStatus {

@@ -58,9 +58,11 @@ export function loadConfig(): Config {
     // Tiles are cached lazily on demand; this only controls an optional
     // full bulk pre-download on startup.
     mapAutodownloadTiles: envBool('MAP_AUTODOWNLOAD_TILES', false),
+    // MapGenie stores tiles as {z}/{row}/{col}, so we substitute {y} (row)
+    // before {x} (column). Swapping these yields a transposed map.
     mapTilesUrl: envStr(
       'MAP_TILES_URL',
-      'https://tiles.mapgenie.io/games/forza-horizon-6/one/default-v2/{z}/{x}/{y}.jpg',
+      'https://tiles.mapgenie.io/games/forza-horizon-6/one/default-v2/{z}/{y}/{x}.jpg',
     ),
     maxSessionListItems: Math.max(1, envInt('MAX_SESSION_LIST_ITEMS', 500)),
   };
