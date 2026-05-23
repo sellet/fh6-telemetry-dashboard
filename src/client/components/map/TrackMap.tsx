@@ -42,12 +42,14 @@ function visiblePath(path: TrackPath, mode: ViewMode): TrackPath {
 
 export function TrackMap() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const mapEnabled = useTelemetryStore((s) => s.status?.map.enabled ?? true);
   const tileCount = useTelemetryStore((s) => s.status?.map.tileCount ?? 0);
   const downloadState = useTelemetryStore((s) => s.status?.map.tileDownload ?? 'idle');
   const [calibrating, setCalibrating] = useState(false);
   const [requested, setRequested] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const viewModeRef = useRef<ViewMode>('live');
@@ -67,6 +69,7 @@ export function TrackMap() {
       attributionControl: false,
       preferCanvas: true,
     });
+    mapRef.current = map;
     fittedRef.current = false;
     lastFitRef.current = 0;
 
@@ -177,9 +180,25 @@ export function TrackMap() {
       unsubscribe();
       tileLayerRef.current = null;
       renderRef.current = null;
+      mapRef.current = null;
       map.remove();
     };
   }, [mapEnabled]);
+
+  // Toggle fullscreen via ESC, and let Leaflet recompute its size when the
+  // container's dimensions change.
+  useEffect(() => {
+    const t = window.setTimeout(() => mapRef.current?.invalidateSize(), 60);
+    if (!fullscreen) return () => window.clearTimeout(t);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [fullscreen]);
 
   // When the view mode changes, force an immediate re-fit so the visible
   // window matches the new mode without waiting for the 5 s throttle.
@@ -214,8 +233,15 @@ export function TrackMap() {
     <Panel title="Track Map">
       {/* `isolate` keeps Leaflet's internal z-indexes from escaping above
           dashboard overlays and modals. */}
-      <div className="relative isolate">
-        <div ref={containerRef} className="h-40 w-full overflow-hidden rounded bg-cockpit-bg" />
+      <div className={fullscreen ? 'fixed inset-0 z-[1100] bg-cockpit-bg p-2' : 'relative isolate'}>
+        <div
+          ref={containerRef}
+          className={
+            fullscreen
+              ? 'h-full w-full overflow-hidden rounded bg-cockpit-bg'
+              : 'h-40 w-full overflow-hidden rounded bg-cockpit-bg'
+          }
+        />
         <div className="absolute right-2 top-2 z-[1000] flex items-center gap-1.5">
           <div className="flex overflow-hidden rounded border border-cockpit-edge bg-cockpit-panel/90 text-xs">
             <button
@@ -252,6 +278,13 @@ export function TrackMap() {
               Full track
             </button>
           </div>
+          <button
+            onClick={() => setFullscreen((f) => !f)}
+            title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen map'}
+            className="rounded border border-cockpit-edge bg-cockpit-panel/90 px-2 py-1 text-xs text-slate-300 hover:bg-cockpit-bg"
+          >
+            {fullscreen ? '✕' : '⛶'}
+          </button>
           <button
             onClick={() => setCalibrating(true)}
             className="rounded border border-cockpit-edge bg-cockpit-panel/90 px-2 py-1 text-xs text-slate-300 hover:bg-cockpit-bg"
