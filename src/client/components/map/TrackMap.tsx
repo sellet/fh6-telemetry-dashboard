@@ -113,14 +113,25 @@ export function TrackMap() {
 
     const render = (frame: TelemetryFrame | null, path: TrackPath): void => {
       const visible = visiblePath(path, viewModeRef.current);
+      const mode = viewModeRef.current;
       if (visible.length > 0) {
         line.setLatLngs(visible.map(([x, z]) => toLatLng(x, z)));
         const now = Date.now();
-        if ((!fittedRef.current && visible.length > 4) || now - lastFitRef.current > 5000) {
+        // Initial fit: do once when there's enough trace. In `full` mode keep
+        // re-fitting periodically so newly explored areas come into view; in
+        // `last-minute` mode we follow the car instead (see panInside below)
+        // and only re-fit when the user explicitly switches modes.
+        if (!fittedRef.current && visible.length > 4) {
           const bounds = line.getBounds();
           if (bounds.isValid()) {
             map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
             fittedRef.current = true;
+            lastFitRef.current = now;
+          }
+        } else if (mode === 'full' && now - lastFitRef.current > 5000) {
+          const bounds = line.getBounds();
+          if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
             lastFitRef.current = now;
           }
         }
@@ -128,7 +139,14 @@ export function TrackMap() {
         line.setLatLngs([]);
       }
       if (frame) {
-        marker.setLatLng(toLatLng(frame.positionX, frame.positionZ));
+        const carLatLng = toLatLng(frame.positionX, frame.positionZ);
+        marker.setLatLng(carLatLng);
+        // Keep the car inside the viewport at all times when following the
+        // last minute of trace — fitBounds alone runs too rarely and the car
+        // visibly drifts off-screen between fits.
+        if (mode === 'last-minute' && fittedRef.current) {
+          map.panInside(carLatLng, { padding: [48, 48], animate: false });
+        }
         const svg = marker.getElement()?.querySelector('svg');
         if (svg) svg.style.transform = `rotate(${(frame.yaw * 180) / Math.PI}deg)`;
       }
