@@ -43,7 +43,11 @@ export type SessionEndReason =
   | 'race-end'
   | 'car-change'
   | 'driving-ended'
+  | 'merged'
   | null;
+
+/** Maximum length of a user-supplied session display name. */
+export const SESSION_NAME_MAX_LENGTH = 64;
 
 export const SESSION_SCHEMA_VERSION = 2;
 
@@ -54,6 +58,8 @@ export interface SessionManifest {
   endReason: SessionEndReason;
   /** Optional in v1 manifests; treat undefined as 'free-roam'. */
   kind?: SessionKind;
+  /** Optional user-supplied display name (shown after the id in the list). */
+  name?: string;
   createdBy: string;
   startedAt: string;
   endedAt: string | null;
@@ -71,6 +77,7 @@ export interface SessionSummary {
   id: string;
   status: SessionStatus;
   kind?: SessionKind;
+  name?: string;
   startedAt: string;
   endedAt: string | null;
   durationMs: number;

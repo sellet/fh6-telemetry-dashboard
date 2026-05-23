@@ -1,7 +1,11 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { Logger } from '../logger';
-import type { SessionManifest, SessionSummary } from '../../../shared/session';
+import {
+  SESSION_NAME_MAX_LENGTH,
+  type SessionManifest,
+  type SessionSummary,
+} from '../../../shared/session';
 
 const SESSION_ID_RE = /^[A-Za-z0-9_-]+$/;
 
@@ -10,6 +14,7 @@ function toSummary(m: SessionManifest): SessionSummary {
     id: m.id,
     status: m.status,
     kind: m.kind, // undefined in v1 manifests — client treats that as free-roam
+    name: m.name,
     startedAt: m.startedAt,
     endedAt: m.endedAt,
     durationMs: m.durationMs,
@@ -80,5 +85,22 @@ export class SessionStore {
     await fsp.rm(dir, { recursive: true, force: true });
     this.logger.info(`deleted session ${id}`);
     return true;
+  }
+
+  /**
+   * Set or clear the display name on a session. Pass an empty string to clear.
+   * Never renames the on-disk folder — the id stays the same.
+   */
+  async rename(id: string, name: string): Promise<SessionManifest | null> {
+    const manifest = await this.getManifest(id);
+    if (!manifest) return null;
+    const trimmed = name.trim().slice(0, SESSION_NAME_MAX_LENGTH);
+    manifest.name = trimmed.length > 0 ? trimmed : undefined;
+    await fsp.writeFile(
+      path.join(this.sessionDir(id), 'manifest.json'),
+      JSON.stringify(manifest, null, 2),
+    );
+    this.logger.info(`session ${id} renamed to "${manifest.name ?? ''}"`);
+    return manifest;
   }
 }

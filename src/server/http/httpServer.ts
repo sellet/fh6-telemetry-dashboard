@@ -34,7 +34,7 @@ export function createHttpServer(config: Config, logger: Logger, deps: HttpDeps)
 
   registerHealthRoutes(app);
   registerStatusRoutes(app, deps.getStatus);
-  registerSessionRoutes(app, config, deps.sessionStore, deps.sessionManager);
+  registerSessionRoutes(app, config, logger, deps.sessionStore, deps.sessionManager);
   registerSettingsRoutes(app, deps.settingsStore);
   registerMapTileRoutes(app, deps.tileService);
 

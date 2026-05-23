@@ -49,7 +49,7 @@ function pad(n: number, width = 2): string {
   return String(n).padStart(width, '0');
 }
 
-function formatSessionId(date: Date): string {
+export function formatSessionId(date: Date): string {
   const stamp =
     `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}` +
     `-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;

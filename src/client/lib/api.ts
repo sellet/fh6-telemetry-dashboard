@@ -45,4 +45,27 @@ export const api = {
     const res = await fetch('/api/sessions/cut', { method: 'POST' });
     if (!res.ok) throw new Error(`failed to cut recording (${res.status})`);
   },
+
+  async renameSession(id: string, name: string): Promise<SessionManifest> {
+    const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error(`failed to rename session (${res.status})`);
+    return (await res.json()) as SessionManifest;
+  },
+
+  async mergeSessions(ids: string[], name?: string): Promise<SessionManifest> {
+    const res = await fetch('/api/sessions/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, name }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`failed to merge sessions (${res.status}) ${text}`);
+    }
+    return (await res.json()) as SessionManifest;
+  },
 };
