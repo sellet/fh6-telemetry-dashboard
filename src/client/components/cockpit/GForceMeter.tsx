@@ -9,9 +9,9 @@ export function GForceMeter() {
   const latG = (frame?.accelerationX ?? 0) / GRAVITY;
   const lonG = (frame?.accelerationZ ?? 0) / GRAVITY;
 
-  const size = 168;
+  const size = 120;
   const c = size / 2;
-  const r = c - 16;
+  const r = c - 12;
   const clamp = (v: number) => Math.max(-1, Math.min(1, v / MAX_G));
   const dotX = c + clamp(latG) * r;
   const dotY = c - clamp(lonG) * r;

@@ -8,21 +8,21 @@ export function GearIndicator() {
 
   return (
     <div className="flex flex-col items-center justify-center">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
         Gear
       </span>
       <span
         className="font-bold leading-none text-cockpit-accent"
-        style={{ fontSize: '8rem', fontVariantNumeric: 'tabular-nums' }}
+        style={{ fontSize: '4rem', fontVariantNumeric: 'tabular-nums' }}
       >
         {formatGear(gear)}
       </span>
       <span
-        className="mt-1 font-mono text-3xl font-bold text-slate-100"
+        className="mt-0.5 font-mono text-xl font-bold text-slate-100"
         style={{ fontVariantNumeric: 'tabular-nums' }}
       >
         {kmh}
-        <span className="ml-1 text-base font-normal text-slate-500">km/h</span>
+        <span className="ml-1 text-xs font-normal text-slate-500">km/h</span>
       </span>
     </div>
   );

@@ -23,15 +23,15 @@ export function RollingChart({ label, data, color, max, unit }: RollingChartProp
   const last = n > 0 ? data[n - 1] : 0;
 
   return (
-    <div className="rounded-lg border border-cockpit-edge bg-cockpit-panel p-2">
-      <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+    <div className="rounded-lg border border-cockpit-edge bg-cockpit-panel p-1">
+      <div className="flex justify-between text-[9px] font-semibold uppercase tracking-wide text-slate-500">
         <span>{label}</span>
         <span className="font-mono text-slate-300">
           {last.toFixed(0)}
           {unit ?? ''}
         </span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-1 h-12 w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-0.5 h-6 w-full">
         {n > 1 && (
           <path
             d={path}

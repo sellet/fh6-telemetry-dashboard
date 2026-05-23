@@ -18,23 +18,23 @@ interface CornerProps {
 
 function Corner({ label, temp, slip, wear }: CornerProps) {
   return (
-    <div className="rounded bg-cockpit-bg p-2">
+    <div className="rounded bg-cockpit-bg p-1.5">
       <div className="flex items-baseline justify-between">
-        <span className="text-[10px] uppercase text-slate-500">{label}</span>
+        <span className="text-[9px] uppercase text-slate-500">{label}</span>
         <span
-          className="font-mono text-xl font-bold"
+          className="font-mono text-sm font-bold"
           style={{ color: tempColor(temp), fontVariantNumeric: 'tabular-nums' }}
         >
           {temp > 0 ? `${temp.toFixed(0)}°` : '--'}
         </span>
       </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded bg-cockpit-edge">
+      <div className="mt-1 h-1 overflow-hidden rounded bg-cockpit-edge">
         <div
           className="h-full bg-cockpit-accent"
           style={{ width: `${Math.min(100, slip * 100)}%` }}
         />
       </div>
-      <div className="mt-1 flex justify-between font-mono text-[10px] text-slate-400">
+      <div className="mt-0.5 flex justify-between font-mono text-[9px] text-slate-400">
         <span>slip {slip.toFixed(2)}</span>
         {wear !== undefined && <span>wear {(wear * 100).toFixed(0)}%</span>}
       </div>
@@ -47,7 +47,7 @@ export function TirePanel() {
 
   return (
     <Panel title="Tires">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-1.5">
         <Corner
           label="FL"
           temp={f?.tireTempFl ?? 0}

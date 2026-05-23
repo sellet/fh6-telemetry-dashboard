@@ -5,15 +5,15 @@ import { Panel } from '../common/Panel';
 function TravelBar({ label, travel }: { label: string; travel: number }) {
   const compressed = Math.min(1, Math.max(0, travel));
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-[10px] uppercase text-slate-500">{label}</span>
-      <div className="relative h-20 w-6 overflow-hidden rounded bg-cockpit-bg">
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-[9px] uppercase text-slate-500">{label}</span>
+      <div className="relative h-12 w-5 overflow-hidden rounded bg-cockpit-bg">
         <div
           className="absolute top-0 w-full bg-sky-500/80"
           style={{ height: `${compressed * 100}%` }}
         />
       </div>
-      <span className="font-mono text-[10px] text-slate-400">{(compressed * 100).toFixed(0)}%</span>
+      <span className="font-mono text-[9px] text-slate-400">{(compressed * 100).toFixed(0)}%</span>
     </div>
   );
 }
@@ -23,7 +23,7 @@ export function SuspensionPanel() {
 
   return (
     <Panel title="Suspension">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3 px-2">
+      <div className="grid grid-cols-4 gap-1 px-1">
         <TravelBar label="FL" travel={f?.normalizedSuspensionTravelFl ?? 0} />
         <TravelBar label="FR" travel={f?.normalizedSuspensionTravelFr ?? 0} />
         <TravelBar label="RL" travel={f?.normalizedSuspensionTravelRl ?? 0} />

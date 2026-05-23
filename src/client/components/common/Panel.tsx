@@ -19,10 +19,10 @@ const TONES: Record<PanelTone, string> = {
 export function Panel({ title, children, className, tone = 'default' }: PanelProps) {
   return (
     <section
-      className={`rounded-lg border p-3 transition-colors ${TONES[tone]} ${className ?? ''}`}
+      className={`rounded-lg border p-2 transition-colors ${TONES[tone]} ${className ?? ''}`}
     >
       {title && (
-        <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+        <h2 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
           {title}
         </h2>
       )}

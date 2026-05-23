@@ -183,7 +183,7 @@ export function TrackMap() {
       {/* `isolate` keeps Leaflet's internal z-indexes from escaping above
           dashboard overlays and modals. */}
       <div className="relative isolate">
-        <div ref={containerRef} className="h-80 w-full overflow-hidden rounded bg-cockpit-bg" />
+        <div ref={containerRef} className="h-40 w-full overflow-hidden rounded bg-cockpit-bg" />
         <div className="absolute right-2 top-2 z-[1000] flex items-center gap-1.5">
           <div className="flex overflow-hidden rounded border border-cockpit-edge bg-cockpit-panel/90 text-xs">
             <button

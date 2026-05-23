@@ -37,8 +37,8 @@ export function Dashboard() {
   else if (mode === 'live' && !receiving) overlay = 'Waiting for FH6 telemetry…';
 
   return (
-    <div className="relative mx-auto max-w-[1440px] p-4">
-      <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-3">
+    <div className="relative mx-auto max-w-[1600px] p-2">
+      <div className="grid grid-cols-3 items-center gap-2">
         <div className="flex justify-center">
           <Tachometer />
         </div>
@@ -50,24 +50,21 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-6">
         <PedalBars />
         <SteeringIndicator />
         <GForceMeter />
-        <LapInfo />
-      </div>
-
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <TirePanel />
         <SuspensionPanel />
+        <LapInfo />
         <VehicleStats />
       </div>
 
-      <div className="mt-3">
+      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <TrackMap />
+        <TirePanel />
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
         <RollingChart
           label="Speed"
           data={history.speed.map((mps) => mps * MPS_TO_KMH)}
