@@ -1,9 +1,16 @@
+<p align="center">
+  <img src="docs/banner.svg" alt="FH6 Telemetry Dashboard banner" width="100%"/>
+</p>
+
 # Forza Horizon 6 Telemetry Dashboard
 
 A self-hosted, Dockerized dashboard for **Forza Horizon 6**. It receives the
 game's "Data Out" UDP telemetry, shows it live in a racing-cockpit web
 dashboard, records every driving session to disk, and replays recorded
 sessions in the same dashboard.
+
+> _This project is not affiliated with Microsoft, Playground Games or any
+> entity behind the Forza franchise. See the [Disclaimer](#disclaimer) below._
 
 ```
 Forza Horizon 6  ──UDP──▶  Container  ──▶  Live dashboard (WebSocket)
@@ -24,6 +31,17 @@ Forza Horizon 6  ──UDP──▶  Container  ──▶  Live dashboard (WebSo
   pause/resume/stop, `0.25x`–`8x` speed, and seek.
 - **Single container** — one image serves the dashboard, the API, the
   WebSocket feed and the UDP receiver.
+
+## Screenshots
+
+|                                                           |                                                               |
+| --------------------------------------------------------- | ------------------------------------------------------------- |
+| ![Live cockpit dashboard](docs/screenshots/dashboard.png) | ![Track map with racing line](docs/screenshots/track-map.png) |
+| Live cockpit dashboard                                    | Track map with racing line                                    |
+
+![Recorded sessions browser](docs/screenshots/sessions.png)
+
+_Recorded sessions browser — race sessions carry a **RACE** pill and car ordinals resolve to make / model via the bundled FM23 dataset._
 
 ## Quick start
 
@@ -195,6 +213,20 @@ and on the Forza Horizon 6 map. Inspiration and concrete reference material:
   - [nettrom/forza_motorsport](https://github.com/nettrom/forza_motorsport)
   - [fabiomix/forza-horizon-telemetry](https://github.com/fabiomix/forza-horizon-telemetry)
   - [csutorasa/go-forza-telemetry](https://pkg.go.dev/github.com/csutorasa/go-forza-telemetry)
+
+## Disclaimer
+
+This project is an **unofficial, fan-made** tool. It is **not affiliated with,
+endorsed by, or sponsored by** Microsoft, Xbox Game Studios, Playground Games,
+Turn 10 Studios, or any other entity behind the Forza franchise. _Forza_ and
+_Forza Horizon_ are trademarks of Microsoft Corporation; all other trademarks
+referenced here are the property of their respective owners.
+
+The dashboard only consumes Forza's publicly documented "Data Out" UDP
+telemetry feed — no game files are modified or redistributed. Map tile
+rendering is best-effort against community-maintained tile servers; see
+[Notes & caveats](#notes--caveats) for the operator's responsibility around
+those tiles.
 
 ## License
 
