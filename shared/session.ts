@@ -42,6 +42,7 @@ export type SessionEndReason =
   | 'race-start'
   | 'race-end'
   | 'car-change'
+  | 'driving-ended'
   | null;
 
 export const SESSION_SCHEMA_VERSION = 2;

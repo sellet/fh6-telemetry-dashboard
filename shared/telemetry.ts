@@ -155,3 +155,15 @@ export const DRIVETRAIN_TYPES: Record<number, string> = {
   1: 'RWD',
   2: 'AWD',
 };
+
+/**
+ * True if the player is in an actual timed race (race / Rivals / Time Trial).
+ *
+ * `isRaceOn` only tells us whether the player is *driving* (vs. in menus); a
+ * free-roam drive in the open world also has `isRaceOn === 1`. To know they
+ * are in a real timed event we look at fields the game only sets while one
+ * is in progress: lap number, race position, and the running lap clock.
+ */
+export function isRacing(frame: TelemetryFrame): boolean {
+  return frame.lapNumber > 0 || frame.racePosition > 0 || frame.currentLap > 0;
+}

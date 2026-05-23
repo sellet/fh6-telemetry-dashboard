@@ -1,6 +1,7 @@
 import { useTelemetryStore } from '../../state/telemetryStore';
 import { Panel } from '../common/Panel';
 import { CAR_CLASSES, DRIVETRAIN_TYPES } from '../../../../shared/telemetry';
+import { carDisplayName } from '../../lib/format';
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -17,6 +18,8 @@ export function VehicleStats() {
   const carClass = f ? (CAR_CLASSES[f.carClass] ?? `#${f.carClass}`) : '--';
   const drivetrain = f ? (DRIVETRAIN_TYPES[f.drivetrainType] ?? '--') : '--';
 
+  const carName = f && f.carOrdinal > 0 ? carDisplayName(f.carOrdinal) : '--';
+
   return (
     <Panel title="Vehicle">
       <div className="grid grid-cols-3 gap-2">
@@ -32,6 +35,12 @@ export function VehicleStats() {
         />
         <Stat label="Car ID" value={f && f.carOrdinal > 0 ? String(f.carOrdinal) : '--'} />
         <Stat label="Cyl." value={f && f.numCylinders > 0 ? String(f.numCylinders) : '--'} />
+      </div>
+      <div className="mt-2 rounded bg-cockpit-bg p-2">
+        <div className="text-[10px] uppercase tracking-wide text-slate-500">Make / model</div>
+        <div className="truncate text-sm font-semibold text-slate-100" title={carName}>
+          {carName}
+        </div>
       </div>
     </Panel>
   );

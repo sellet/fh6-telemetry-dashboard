@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import type { Config } from '../config';
 import type { Logger } from '../logger';
 import type { TelemetryBus } from '../core/telemetryBus';
-import type { TelemetryFrame } from '../../../shared/telemetry';
+import { isRacing, type TelemetryFrame } from '../../../shared/telemetry';
 import {
   SESSION_SCHEMA_VERSION,
   emptyStats,
@@ -40,7 +40,9 @@ export interface RecordingStatus {
 }
 
 function kindFor(frame: TelemetryFrame): SessionKind {
-  return frame.isRaceOn === 1 ? 'race' : 'free-roam';
+  // Race kind is derived from lap/position state, NOT isRaceOn (which only
+  // means "the player is driving" — open-world cruising is also isRaceOn=1).
+  return isRacing(frame) ? 'race' : 'free-roam';
 }
 
 function pad(n: number, width = 2): string {
@@ -107,19 +109,35 @@ export class SessionManager {
   }
 
   private onFrame(frame: TelemetryFrame): void {
+    const isDriving = frame.isRaceOn === 1;
+
     if (this.state === 'idle') {
+      // Don't record menu/paused time — only start when the player is actually
+      // driving. Positions reported with isRaceOn=0 are unreliable anyway.
+      if (!isDriving) return;
       this.beginSession(frame);
     } else if (this.active) {
       const a = this.active;
+      if (!isDriving) {
+        // Player went back to menus / paused. Finalize the session — a new
+        // one will start the next time they drive.
+        const old = a;
+        this.state = 'idle';
+        this.active = null;
+        const finalize = this.pendingFinalize.then(() => this.finalizeOne(old, 'driving-ended'));
+        this.pendingFinalize = finalize.catch(() => {});
+        return;
+      }
       const frameKind = kindFor(frame);
       if (frameKind !== a.kind) {
-        // isRaceOn flipped — finalize the old session and start a new one
-        // whose first frame is this transition frame.
+        // Entered or left a timed event — finalize the old session and start
+        // a new one whose first frame is this transition frame.
         this.rollSession(frame, frameKind === 'race' ? 'race-start' : 'race-end');
       } else if (frame.carOrdinal !== a.firstFrame.carOrdinal) {
         this.rollSession(frame, 'car-change');
       }
     }
+
     const active = this.active;
     if (this.state === 'recording' && active) {
       active.writer.write(frame);

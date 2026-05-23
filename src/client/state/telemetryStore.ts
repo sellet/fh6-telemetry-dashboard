@@ -109,7 +109,12 @@ export const useTelemetryStore = create<TelemetryStore>((set) => ({
         throttle: pushCapped(state.history.throttle, frame.accelerator),
         brake: pushCapped(state.history.brake, frame.brake),
       },
-      trackPath: nextTrackPath(state.trackPath, frame.positionX, frame.positionZ, frame.recvTime),
+      // Positions reported while isRaceOn=0 (menus / paused) are unreliable
+      // and would teleport the trace; only record while the player is driving.
+      trackPath:
+        frame.isRaceOn === 1
+          ? nextTrackPath(state.trackPath, frame.positionX, frame.positionZ, frame.recvTime)
+          : state.trackPath,
     })),
 
   setConnection: (connection) => set({ connection }),

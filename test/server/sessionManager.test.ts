@@ -47,7 +47,24 @@ function readManifest(dir: string): SessionManifest {
 }
 
 describe('SessionManager', () => {
-  it('records a race session and finalizes it after the inactivity timeout', async () => {
+  it('ignores menu frames (isRaceOn=0) and only starts a session when the player drives', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    emit(bus, { isRaceOn: 0, speed: 0 });
+    emit(bus, { isRaceOn: 0, speed: 0 });
+    expect(manager.getStatus().active).toBe(false);
+
+    emit(bus, { isRaceOn: 1, speed: 25 });
+    expect(manager.getStatus().active).toBe(true);
+
+    await manager.shutdown();
+    expect(fs.readdirSync(config.sessionsDir)).toHaveLength(1);
+  });
+
+  it('records a free-roam session (driving but no lap/position) and times it out', async () => {
     const config = makeConfig();
     const bus = new TelemetryBus();
     const manager = new SessionManager(config, silentLogger, bus);
@@ -61,90 +78,63 @@ describe('SessionManager', () => {
     await manager.checkTimeoutAt(Date.now() + 10_000);
     await manager.shutdown();
 
-    const sessions = fs.readdirSync(config.sessionsDir);
-    expect(sessions).toHaveLength(1);
-
-    const dir = path.join(config.sessionsDir, sessions[0]);
+    const dir = path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]);
     const manifest = readManifest(dir);
     expect(manifest.status).toBe('completed');
     expect(manifest.endReason).toBe('timeout');
-    expect(manifest.kind).toBe('race');
-    expect(manifest.frameCount).toBe(5);
-
-    const lines = fs.readFileSync(path.join(dir, 'telemetry.jsonl'), 'utf8').trim().split('\n');
-    expect(lines).toHaveLength(5);
-    expect(fs.existsSync(path.join(dir, 'stats.json'))).toBe(true);
-    expect(manager.getStatus().active).toBe(false);
-  });
-
-  it('starts a free-roam session on the very first frame, regardless of isRaceOn', async () => {
-    const config = makeConfig();
-    const bus = new TelemetryBus();
-    const manager = new SessionManager(config, silentLogger, bus);
-    manager.start();
-
-    emit(bus, { isRaceOn: 0, speed: 5 });
-    emit(bus, { isRaceOn: 0, speed: 6 });
-    expect(manager.getStatus().active).toBe(true);
-
-    await manager.shutdown();
-
-    const dir = path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]);
-    const manifest = readManifest(dir);
     expect(manifest.kind).toBe('free-roam');
-    expect(manifest.frameCount).toBe(2);
+    expect(manifest.frameCount).toBe(5);
   });
 
-  it('finalizes the active session on shutdown', async () => {
+  it('records a race session when the first frame has lap / position data', async () => {
     const config = makeConfig();
     const bus = new TelemetryBus();
     const manager = new SessionManager(config, silentLogger, bus);
     manager.start();
 
-    emit(bus, { isRaceOn: 1, speed: 30 });
+    emit(bus, { isRaceOn: 1, racePosition: 2, lapNumber: 1, speed: 60 });
+    emit(bus, { isRaceOn: 1, racePosition: 2, lapNumber: 1, speed: 65 });
     await manager.shutdown();
 
-    const dir = path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]);
-    const manifest = readManifest(dir);
-    expect(manifest.status).toBe('completed');
-    expect(manifest.endReason).toBe('shutdown');
+    const manifest = readManifest(
+      path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]),
+    );
     expect(manifest.kind).toBe('race');
+    expect(manifest.endReason).toBe('shutdown');
   });
 
-  it('splits the session when isRaceOn flips 0 → 1 (race-start)', async () => {
+  it('splits at race-start when lap / position appear mid-drive', async () => {
     const config = makeConfig();
     const bus = new TelemetryBus();
     const manager = new SessionManager(config, silentLogger, bus);
     manager.start();
 
-    emit(bus, { isRaceOn: 0, speed: 5 });
-    emit(bus, { isRaceOn: 0, speed: 6 });
-    emit(bus, { isRaceOn: 1, speed: 50 }); // boundary frame — starts new session
-    emit(bus, { isRaceOn: 1, speed: 60 });
+    emit(bus, { isRaceOn: 1, speed: 25 });
+    emit(bus, { isRaceOn: 1, speed: 30 });
+    emit(bus, { isRaceOn: 1, lapNumber: 1, racePosition: 3, speed: 50 });
+    emit(bus, { isRaceOn: 1, lapNumber: 1, racePosition: 3, speed: 55 });
     await manager.shutdown();
 
-    const sessions = fs.readdirSync(config.sessionsDir).sort();
+    const sessions = fs.readdirSync(config.sessionsDir);
     expect(sessions).toHaveLength(2);
 
     const manifests = sessions.map((id) => readManifest(path.join(config.sessionsDir, id)));
     const freeRoam = manifests.find((m) => m.kind === 'free-roam');
     const race = manifests.find((m) => m.kind === 'race');
-    expect(freeRoam).toBeDefined();
-    expect(race).toBeDefined();
     expect(freeRoam?.endReason).toBe('race-start');
     expect(freeRoam?.frameCount).toBe(2);
     expect(race?.frameCount).toBe(2);
   });
 
-  it('splits the session when isRaceOn flips 1 → 0 (race-end)', async () => {
+  it('splits at race-end when lap / position drop back to 0', async () => {
     const config = makeConfig();
     const bus = new TelemetryBus();
     const manager = new SessionManager(config, silentLogger, bus);
     manager.start();
 
-    emit(bus, { isRaceOn: 1, speed: 50 });
-    emit(bus, { isRaceOn: 1, speed: 60 });
-    emit(bus, { isRaceOn: 0, speed: 10 });
+    emit(bus, { isRaceOn: 1, lapNumber: 1, racePosition: 2, speed: 60 });
+    emit(bus, { isRaceOn: 1, lapNumber: 1, racePosition: 2, speed: 65 });
+    emit(bus, { isRaceOn: 1, speed: 30 });
     await manager.shutdown();
 
     const sessions = fs.readdirSync(config.sessionsDir);
@@ -155,6 +145,35 @@ describe('SessionManager', () => {
     const freeRoam = manifests.find((m) => m.kind === 'free-roam');
     expect(race?.endReason).toBe('race-end');
     expect(freeRoam?.endReason).toBe('shutdown');
+  });
+
+  it('finalizes the session when the player goes back to menus (isRaceOn 1→0)', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    emit(bus, { isRaceOn: 1, speed: 25 });
+    emit(bus, { isRaceOn: 1, speed: 30 });
+    emit(bus, { isRaceOn: 0, speed: 0 });
+    expect(manager.getStatus().active).toBe(false);
+
+    // Then driving resumes — a brand-new session must begin.
+    emit(bus, { isRaceOn: 1, speed: 40 });
+    expect(manager.getStatus().active).toBe(true);
+
+    await manager.shutdown();
+
+    const sessions = fs.readdirSync(config.sessionsDir).sort();
+    expect(sessions).toHaveLength(2);
+
+    const manifests = sessions
+      .map((id) => readManifest(path.join(config.sessionsDir, id)))
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    expect(manifests[0].endReason).toBe('driving-ended');
+    expect(manifests[0].frameCount).toBe(2);
+    expect(manifests[1].endReason).toBe('shutdown');
+    expect(manifests[1].frameCount).toBe(1);
   });
 
   it('splits the session when carOrdinal changes', async () => {

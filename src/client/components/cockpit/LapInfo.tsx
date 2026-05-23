@@ -1,6 +1,7 @@
 import { useTelemetryStore } from '../../state/telemetryStore';
 import { Panel } from '../common/Panel';
 import { formatLapTime } from '../../lib/format';
+import { isRacing } from '../../../../shared/telemetry';
 
 function TimeRow({ label, seconds, accent }: { label: string; seconds: number; accent?: boolean }) {
   return (
@@ -26,7 +27,8 @@ function Mini({ label, value }: { label: string; value: string }) {
 
 export function LapInfo() {
   const f = useTelemetryStore((s) => s.frame);
-  const inRace = useTelemetryStore((s) => s.frame?.isRaceOn === 1);
+  // Real race detection (lap/position/lap-clock) — not just "driving".
+  const inRace = useTelemetryStore((s) => (s.frame ? isRacing(s.frame) : false));
 
   return (
     <Panel title="Lap & Race" tone={inRace ? 'race' : 'default'}>
