@@ -22,7 +22,8 @@
     "format": "prettier --write .",
     "capture": "tsx src/server/tools/capturePacket.ts",
     "download-tiles": "tsx src/server/tools/downloadTiles.ts",
-    "update-cars": "node scripts/build-car-lookup.mjs"
+    "update-cars": "node scripts/build-car-lookup.mjs",
+    "build:favicons": "python3 scripts/build-favicons.py"
   },
   "dependencies": {
     "@fastify/static": "^8.0.4",
