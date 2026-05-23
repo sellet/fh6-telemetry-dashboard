@@ -5,6 +5,6 @@ data:
   dockerfiledir: .
   hubimagename: fh6-telemetry-dashboard
   repotype: hub
-  imagetag: latest  
+  imagetag: latest
   branches: ['master', 'main']
   buildarch: linux/arm64/v8,linux/amd64

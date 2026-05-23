@@ -27,13 +27,27 @@ Forza Horizon 6  ──UDP──▶  Container  ──▶  Live dashboard (WebSo
 
 ## Quick start
 
+The published image is on Docker Hub as
+[`acaranta/fh6-telemetry-dashboard`](https://hub.docker.com/r/acaranta/fh6-telemetry-dashboard).
+The compose file in this repo pulls it directly:
+
 ```bash
-docker compose up --build
+docker compose up -d
 ```
 
-Then open <http://localhost:8080>.
+Then open the dashboard (default <http://localhost:8131>; adjust ports/env in
+`docker-compose.yml` to taste).
 
 Recorded sessions are stored in `./fh6-data` on the host (mounted at `/data`).
+
+### Build from source
+
+If you want to build the dashboard locally from this repository instead of
+pulling the published image, use the dev compose file:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
 
 ## Configure Forza Horizon 6
 

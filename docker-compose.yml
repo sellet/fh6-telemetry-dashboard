@@ -1,7 +1,6 @@
 services:
   fh6-dashboard:
-    build: .
-    image: fh6-telemetry-dashboard
+    image: acaranta/fh6-telemetry-dashboard:latest
     container_name: fh6-dashboard
     restart: unless-stopped
     ports:
@@ -14,7 +13,7 @@ services:
       DATA_DIR: /data
       SESSION_TIMEOUT_SECONDS: 30
       COMPRESS_FINISHED_SESSIONS: 'true'
-      ALLOW_DELETE_SESSIONS: 'false'
+      ALLOW_DELETE_SESSIONS: 'true'
       LOCK_TO_FIRST_SENDER: 'false'
       LOG_LEVEL: info
       BROADCAST_HZ: 30
