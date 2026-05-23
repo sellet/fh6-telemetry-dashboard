@@ -119,45 +119,51 @@ export function TrackMap() {
       const mode = viewModeRef.current;
       if (visible.length > 0) {
         line.setLatLngs(visible.map(([x, z]) => toLatLng(x, z)));
-        const now = Date.now();
-        // `live` follows the car directly (see below); other modes fit the
-        // trace once initially and `full` keeps re-fitting periodically so
-        // newly explored areas come into view.
-        if (mode !== 'live' && !fittedRef.current && visible.length > 4) {
-          const bounds = line.getBounds();
-          if (bounds.isValid()) {
-            map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
-            fittedRef.current = true;
-            lastFitRef.current = now;
-          }
-        } else if (mode === 'full' && now - lastFitRef.current > 5000) {
-          const bounds = line.getBounds();
-          if (bounds.isValid()) {
-            map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
-            lastFitRef.current = now;
-          }
-        }
       } else {
         line.setLatLngs([]);
       }
-      if (frame) {
-        const carLatLng = toLatLng(frame.positionX, frame.positionZ);
-        marker.setLatLng(carLatLng);
-        if (mode === 'live') {
-          // Lock the car to the centre of the viewport.
-          if (!fittedRef.current) {
-            map.setView(carLatLng, 15, { animate: false });
-            fittedRef.current = true;
-          } else {
-            map.panTo(carLatLng, { animate: false });
-          }
-        } else if (mode === 'last-minute' && fittedRef.current) {
-          // Keep the car inside the viewport between periodic re-fits.
-          map.panInside(carLatLng, { padding: [48, 48], animate: false });
+      if (!frame) return;
+      const carLatLng = toLatLng(frame.positionX, frame.positionZ);
+      marker.setLatLng(carLatLng);
+      const now = Date.now();
+      if (mode === 'live') {
+        // Lock the car to the centre of the viewport at a fixed zoom level.
+        if (!fittedRef.current) {
+          map.setView(carLatLng, 15, { animate: false });
+          fittedRef.current = true;
+        } else {
+          map.panTo(carLatLng, { animate: false });
         }
-        const svg = marker.getElement()?.querySelector('svg');
-        if (svg) svg.style.transform = `rotate(${(frame.yaw * 180) / Math.PI}deg)`;
+      } else {
+        // Last 60s / full track: keep the car centred AND the visible trace
+        // entirely in view by fitting a bounds symmetric around the car so
+        // the car sits at the centre while the trail still fits.
+        map.panTo(carLatLng, { animate: false });
+        if (visible.length > 1 && now - lastFitRef.current > 200) {
+          const cx = frame.positionX;
+          const cz = frame.positionZ;
+          let mx = 0;
+          let mz = 0;
+          for (const [x, z] of visible) {
+            const dx = Math.abs(x - cx);
+            if (dx > mx) mx = dx;
+            const dz = Math.abs(z - cz);
+            if (dz > mz) mz = dz;
+          }
+          if (mx > 0 || mz > 0) {
+            const sw = toLatLng(cx - mx, cz - mz);
+            const ne = toLatLng(cx + mx, cz + mz);
+            map.fitBounds(L.latLngBounds([sw, ne]), {
+              padding: [24, 24],
+              maxZoom: 16,
+              animate: false,
+            });
+            lastFitRef.current = now;
+          }
+        }
       }
+      const svg = marker.getElement()?.querySelector('svg');
+      if (svg) svg.style.transform = `rotate(${(frame.yaw * 180) / Math.PI}deg)`;
     };
     renderRef.current = render;
 
