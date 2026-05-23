@@ -9,6 +9,7 @@ function toSummary(m: SessionManifest): SessionSummary {
   return {
     id: m.id,
     status: m.status,
+    kind: m.kind, // undefined in v1 manifests — client treats that as free-roam
     startedAt: m.startedAt,
     endedAt: m.endedAt,
     durationMs: m.durationMs,

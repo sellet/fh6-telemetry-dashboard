@@ -71,6 +71,7 @@ export async function startServer(config: Config, logger: Logger): Promise<Serve
   const http = createHttpServer(config, logger, {
     getStatus,
     sessionStore,
+    sessionManager,
     settingsStore,
     tileService,
   });

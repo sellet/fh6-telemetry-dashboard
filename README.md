@@ -79,7 +79,7 @@ a seek bar. Press **Stop** to return to live mode.
 
 ## Configuration
 
-All settings are environment variables (see [.env.example](.env.example)):
+All settings are environment variables — set them in `docker-compose.yml` (or pass to `docker run`):
 
 | Variable                     | Default   | Description                                        |
 | ---------------------------- | --------- | -------------------------------------------------- |

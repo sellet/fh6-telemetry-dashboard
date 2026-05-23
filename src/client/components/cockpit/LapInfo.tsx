@@ -26,9 +26,10 @@ function Mini({ label, value }: { label: string; value: string }) {
 
 export function LapInfo() {
   const f = useTelemetryStore((s) => s.frame);
+  const inRace = useTelemetryStore((s) => s.frame?.isRaceOn === 1);
 
   return (
-    <Panel title="Lap & Race">
+    <Panel title="Lap & Race" tone={inRace ? 'race' : 'default'}>
       <div className="space-y-1.5">
         <TimeRow label="Current" seconds={f?.currentLap ?? 0} />
         <TimeRow label="Last" seconds={f?.lastLap ?? 0} />

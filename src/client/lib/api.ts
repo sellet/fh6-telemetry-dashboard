@@ -40,4 +40,9 @@ export const api = {
     const res = await fetch('/api/maptiles/refresh', { method: 'POST' });
     if (!res.ok) throw new Error(`failed to refresh tiles (${res.status})`);
   },
+
+  async cutRecording(): Promise<void> {
+    const res = await fetch('/api/sessions/cut', { method: 'POST' });
+    if (!res.ok) throw new Error(`failed to cut recording (${res.status})`);
+  },
 };

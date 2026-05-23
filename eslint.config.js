@@ -22,6 +22,10 @@ module.exports = tseslint.config(
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
+    files: ['**/*.mjs', 'scripts/**/*.js'],
+    languageOptions: { globals: { ...globals.node }, sourceType: 'module' },
+  },
+  {
     files: ['src/server/**/*.ts', 'shared/**/*.ts', 'test/**/*.ts'],
     languageOptions: { globals: { ...globals.node } },
   },

@@ -42,8 +42,12 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
+function readManifest(dir: string): SessionManifest {
+  return JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')) as SessionManifest;
+}
+
 describe('SessionManager', () => {
-  it('records a session and finalizes it after the inactivity timeout', async () => {
+  it('records a race session and finalizes it after the inactivity timeout', async () => {
     const config = makeConfig();
     const bus = new TelemetryBus();
     const manager = new SessionManager(config, silentLogger, bus);
@@ -61,11 +65,10 @@ describe('SessionManager', () => {
     expect(sessions).toHaveLength(1);
 
     const dir = path.join(config.sessionsDir, sessions[0]);
-    const manifest = JSON.parse(
-      fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'),
-    ) as SessionManifest;
+    const manifest = readManifest(dir);
     expect(manifest.status).toBe('completed');
     expect(manifest.endReason).toBe('timeout');
+    expect(manifest.kind).toBe('race');
     expect(manifest.frameCount).toBe(5);
 
     const lines = fs.readFileSync(path.join(dir, 'telemetry.jsonl'), 'utf8').trim().split('\n');
@@ -74,18 +77,22 @@ describe('SessionManager', () => {
     expect(manager.getStatus().active).toBe(false);
   });
 
-  it('does not start a session for menu (isRaceOn=0) frames', async () => {
+  it('starts a free-roam session on the very first frame, regardless of isRaceOn', async () => {
     const config = makeConfig();
     const bus = new TelemetryBus();
     const manager = new SessionManager(config, silentLogger, bus);
     manager.start();
 
-    emit(bus, { isRaceOn: 0, speed: 0 });
-    emit(bus, { isRaceOn: 0, speed: 0 });
-    expect(manager.getStatus().active).toBe(false);
+    emit(bus, { isRaceOn: 0, speed: 5 });
+    emit(bus, { isRaceOn: 0, speed: 6 });
+    expect(manager.getStatus().active).toBe(true);
 
     await manager.shutdown();
-    expect(fs.existsSync(config.sessionsDir)).toBe(false);
+
+    const dir = path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]);
+    const manifest = readManifest(dir);
+    expect(manifest.kind).toBe('free-roam');
+    expect(manifest.frameCount).toBe(2);
   });
 
   it('finalizes the active session on shutdown', async () => {
@@ -98,11 +105,102 @@ describe('SessionManager', () => {
     await manager.shutdown();
 
     const dir = path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]);
-    const manifest = JSON.parse(
-      fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'),
-    ) as SessionManifest;
+    const manifest = readManifest(dir);
     expect(manifest.status).toBe('completed');
     expect(manifest.endReason).toBe('shutdown');
+    expect(manifest.kind).toBe('race');
+  });
+
+  it('splits the session when isRaceOn flips 0 → 1 (race-start)', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    emit(bus, { isRaceOn: 0, speed: 5 });
+    emit(bus, { isRaceOn: 0, speed: 6 });
+    emit(bus, { isRaceOn: 1, speed: 50 }); // boundary frame — starts new session
+    emit(bus, { isRaceOn: 1, speed: 60 });
+    await manager.shutdown();
+
+    const sessions = fs.readdirSync(config.sessionsDir).sort();
+    expect(sessions).toHaveLength(2);
+
+    const manifests = sessions.map((id) => readManifest(path.join(config.sessionsDir, id)));
+    const freeRoam = manifests.find((m) => m.kind === 'free-roam');
+    const race = manifests.find((m) => m.kind === 'race');
+    expect(freeRoam).toBeDefined();
+    expect(race).toBeDefined();
+    expect(freeRoam?.endReason).toBe('race-start');
+    expect(freeRoam?.frameCount).toBe(2);
+    expect(race?.frameCount).toBe(2);
+  });
+
+  it('splits the session when isRaceOn flips 1 → 0 (race-end)', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    emit(bus, { isRaceOn: 1, speed: 50 });
+    emit(bus, { isRaceOn: 1, speed: 60 });
+    emit(bus, { isRaceOn: 0, speed: 10 });
+    await manager.shutdown();
+
+    const sessions = fs.readdirSync(config.sessionsDir);
+    expect(sessions).toHaveLength(2);
+
+    const manifests = sessions.map((id) => readManifest(path.join(config.sessionsDir, id)));
+    const race = manifests.find((m) => m.kind === 'race');
+    const freeRoam = manifests.find((m) => m.kind === 'free-roam');
+    expect(race?.endReason).toBe('race-end');
+    expect(freeRoam?.endReason).toBe('shutdown');
+  });
+
+  it('splits the session when carOrdinal changes', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    emit(bus, { isRaceOn: 1, carOrdinal: 100, speed: 50 });
+    emit(bus, { isRaceOn: 1, carOrdinal: 100, speed: 60 });
+    emit(bus, { isRaceOn: 1, carOrdinal: 200, speed: 70 });
+    await manager.shutdown();
+
+    const sessions = fs.readdirSync(config.sessionsDir);
+    expect(sessions).toHaveLength(2);
+
+    const manifests = sessions
+      .map((id) => readManifest(path.join(config.sessionsDir, id)))
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    expect(manifests[0].endReason).toBe('car-change');
+    expect(manifests[0].car.ordinal).toBe(100);
+    expect(manifests[1].car.ordinal).toBe(200);
+  });
+
+  it('cut() finalizes the active session and lets the next frame start a fresh one', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    emit(bus, { isRaceOn: 1, speed: 50 });
+    emit(bus, { isRaceOn: 1, speed: 55 });
+    const cutId = await manager.cut();
+    expect(cutId).toBeTruthy();
+    expect(manager.getStatus().active).toBe(false);
+
+    emit(bus, { isRaceOn: 1, speed: 60 });
+    expect(manager.getStatus().active).toBe(true);
+    await manager.shutdown();
+
+    const sessions = fs.readdirSync(config.sessionsDir);
+    expect(sessions).toHaveLength(2);
+
+    const cutManifest = readManifest(path.join(config.sessionsDir, cutId as string));
+    expect(cutManifest.endReason).toBe('cut');
+    expect(cutManifest.frameCount).toBe(2);
   });
 });
 

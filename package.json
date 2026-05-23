@@ -21,7 +21,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "capture": "tsx src/server/tools/capturePacket.ts",
-    "download-tiles": "tsx src/server/tools/downloadTiles.ts"
+    "download-tiles": "tsx src/server/tools/downloadTiles.ts",
+    "update-cars": "node scripts/build-car-lookup.mjs"
   },
   "dependencies": {
     "@fastify/static": "^8.0.4",

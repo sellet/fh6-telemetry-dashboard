@@ -1,4 +1,5 @@
 /** Display formatting helpers. */
+import { CAR_LOOKUP } from '../../../shared/carLookup';
 
 export const MPS_TO_KMH = 3.6;
 export const MPS_TO_MPH = 2.2369362921;
@@ -50,4 +51,13 @@ export function steerFraction(raw: number): number {
 export function placeholderOr(value: number | undefined, decimals = 0): string {
   if (value === undefined || !Number.isFinite(value)) return '--';
   return value.toFixed(decimals);
+}
+
+/** Map a Forza car ordinal to a make/model string, or "Car #ordinal" if unknown. */
+export function carDisplayName(ordinal: number): string {
+  if (!Number.isFinite(ordinal) || ordinal <= 0) return 'Unknown car';
+  const entry = CAR_LOOKUP[ordinal];
+  if (!entry) return `Car #${ordinal}`;
+  const year = entry.year > 0 ? ` (${entry.year})` : '';
+  return `${entry.make} ${entry.model}${year}`.trim();
 }

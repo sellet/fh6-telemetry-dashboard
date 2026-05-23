@@ -12,6 +12,7 @@ import {
   SESSION_SCHEMA_VERSION,
   emptyStats,
   type SessionEndReason,
+  type SessionKind,
   type SessionManifest,
   type SessionStats,
   type SessionStatus,
@@ -27,6 +28,7 @@ interface ActiveSession {
   startedAt: Date;
   lastFrameTimeMs: number;
   firstFrame: TelemetryFrame;
+  kind: SessionKind;
 }
 
 export interface RecordingStatus {
@@ -35,6 +37,10 @@ export interface RecordingStatus {
   frameCount: number;
   droppedFrames: number;
   error: string | null;
+}
+
+function kindFor(frame: TelemetryFrame): SessionKind {
+  return frame.isRaceOn === 1 ? 'race' : 'free-roam';
 }
 
 function pad(n: number, width = 2): string {
@@ -74,13 +80,18 @@ export async function streamTelemetryFile(
 
 /**
  * Records each driving session to disk. A session starts on the first
- * isRaceOn frame and ends after SESSION_TIMEOUT_SECONDS of packet silence.
+ * telemetry frame and automatically splits whenever `isRaceOn` flips
+ * (race-start / race-end) or `carOrdinal` changes. A session ends when no
+ * telemetry packets have been received for SESSION_TIMEOUT_SECONDS. The
+ * `cut()` API splits the current recording on demand.
  */
 export class SessionManager {
   private state: SessionStatus | 'idle' = 'idle';
   private active: ActiveSession | null = null;
   private timeoutTimer: NodeJS.Timeout | null = null;
   private recordingError: string | null = null;
+  /** Chain of pending finalizations so transitions never block ingestion. */
+  private pendingFinalize: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly config: Config,
@@ -97,9 +108,17 @@ export class SessionManager {
 
   private onFrame(frame: TelemetryFrame): void {
     if (this.state === 'idle') {
-      // Begin a session only for actual driving, not menu idle frames.
-      if (frame.isRaceOn !== 1) return;
       this.beginSession(frame);
+    } else if (this.active) {
+      const a = this.active;
+      const frameKind = kindFor(frame);
+      if (frameKind !== a.kind) {
+        // isRaceOn flipped — finalize the old session and start a new one
+        // whose first frame is this transition frame.
+        this.rollSession(frame, frameKind === 'race' ? 'race-start' : 'race-end');
+      } else if (frame.carOrdinal !== a.firstFrame.carOrdinal) {
+        this.rollSession(frame, 'car-change');
+      }
     }
     const active = this.active;
     if (this.state === 'recording' && active) {
@@ -107,6 +126,23 @@ export class SessionManager {
       active.stats.update(frame);
       active.lastFrameTimeMs = Date.now();
     }
+  }
+
+  /**
+   * Finalize the current session and immediately begin a new one with
+   * `currentFrame` as its first frame. The finalize runs asynchronously so
+   * ingestion of the new session is not blocked.
+   */
+  private rollSession(currentFrame: TelemetryFrame, reason: SessionEndReason): void {
+    const old = this.active;
+    if (!old || this.state !== 'recording') return;
+    this.state = 'idle';
+    this.active = null;
+    const finalize = this.pendingFinalize.then(() => this.finalizeOne(old, reason));
+    this.pendingFinalize = finalize.catch(() => {
+      // errors are logged inside finalizeOne; do not poison the chain
+    });
+    this.beginSession(currentFrame);
   }
 
   private beginSession(firstFrame: TelemetryFrame): void {
@@ -129,6 +165,7 @@ export class SessionManager {
       startedAt,
       lastFrameTimeMs: Date.now(),
       firstFrame,
+      kind: kindFor(firstFrame),
     };
     this.state = 'recording';
 
@@ -148,7 +185,7 @@ export class SessionManager {
         2,
       ),
     );
-    this.logger.info(`session ${id} started`);
+    this.logger.info(`session ${id} started (${this.active.kind})`);
   }
 
   private async checkTimeout(now = Date.now()): Promise<void> {
@@ -163,13 +200,27 @@ export class SessionManager {
     return this.checkTimeout(now);
   }
 
+  /** Detach the active session from the manager and finalize it. */
   private async finalize(reason: SessionEndReason): Promise<void> {
     const active = this.active;
     if (!active || this.state !== 'recording') return;
     this.state = 'idle';
     this.active = null;
+    await this.finalizeOne(active, reason);
+  }
 
-    await active.writer.close();
+  /**
+   * Finalize a specific session object — closes its writer, optionally gzips,
+   * writes stats and the final manifest. Takes the session by argument so
+   * `rollSession` can finalize the old session in the background while a new
+   * one is already accepting frames.
+   */
+  private async finalizeOne(active: ActiveSession, reason: SessionEndReason): Promise<void> {
+    try {
+      await active.writer.close();
+    } catch (err) {
+      this.logger.error({ err }, `failed to close writer for session ${active.id}`);
+    }
 
     let compressed = false;
     let dataFile = 'telemetry.jsonl';
@@ -203,6 +254,17 @@ export class SessionManager {
     this.logger.info(`session ${active.id} finalized (${reason}, ${manifest.frameCount} frames)`);
   }
 
+  /** Manually end the current session. The next incoming frame starts a fresh one. */
+  async cut(): Promise<string | null> {
+    if (this.state !== 'recording' || !this.active) return null;
+    const old = this.active;
+    this.state = 'idle';
+    this.active = null;
+    await this.pendingFinalize;
+    await this.finalizeOne(old, 'cut');
+    return old.id;
+  }
+
   private buildManifest(
     active: ActiveSession,
     status: SessionStatus,
@@ -218,6 +280,7 @@ export class SessionManager {
       schemaVersion: SESSION_SCHEMA_VERSION,
       status,
       endReason,
+      kind: active.kind,
       createdBy: 'fh6-telemetry-dashboard',
       startedAt: active.startedAt.toISOString(),
       endedAt: endedAt ? endedAt.toISOString() : null,
@@ -256,6 +319,8 @@ export class SessionManager {
     if (this.state === 'recording') {
       await this.finalize('shutdown');
     }
+    // Wait for any background finalizations queued by rollSession().
+    await this.pendingFinalize;
   }
 }
 

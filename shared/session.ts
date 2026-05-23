@@ -32,15 +32,27 @@ export interface SessionStats {
 }
 
 export type SessionStatus = 'recording' | 'completed';
-export type SessionEndReason = 'timeout' | 'shutdown' | 'recovered' | null;
+/** Race vs free-roam, derived from `isRaceOn` of the first frame in the session. */
+export type SessionKind = 'race' | 'free-roam';
+export type SessionEndReason =
+  | 'timeout'
+  | 'shutdown'
+  | 'recovered'
+  | 'cut'
+  | 'race-start'
+  | 'race-end'
+  | 'car-change'
+  | null;
 
-export const SESSION_SCHEMA_VERSION = 1;
+export const SESSION_SCHEMA_VERSION = 2;
 
 export interface SessionManifest {
   id: string;
   schemaVersion: number;
   status: SessionStatus;
   endReason: SessionEndReason;
+  /** Optional in v1 manifests; treat undefined as 'free-roam'. */
+  kind?: SessionKind;
   createdBy: string;
   startedAt: string;
   endedAt: string | null;
@@ -57,6 +69,7 @@ export interface SessionManifest {
 export interface SessionSummary {
   id: string;
   status: SessionStatus;
+  kind?: SessionKind;
   startedAt: string;
   endedAt: string | null;
   durationMs: number;

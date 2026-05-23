@@ -6,6 +6,7 @@ import type { Config } from '../config';
 import type { Logger } from '../logger';
 import type { ServerStatus } from '../../../shared/api';
 import type { SessionStore } from '../session/sessionStore';
+import type { SessionManager } from '../session/sessionManager';
 import type { SettingsStore } from '../map/settingsStore';
 import type { MapTileService } from '../map/tileService';
 import { registerHealthRoutes } from './routes/health';
@@ -17,6 +18,7 @@ import { registerMapTileRoutes } from './routes/maptiles';
 export interface HttpDeps {
   getStatus: () => ServerStatus;
   sessionStore: SessionStore;
+  sessionManager: SessionManager;
   settingsStore: SettingsStore;
   tileService: MapTileService;
 }
@@ -32,7 +34,7 @@ export function createHttpServer(config: Config, logger: Logger, deps: HttpDeps)
 
   registerHealthRoutes(app);
   registerStatusRoutes(app, deps.getStatus);
-  registerSessionRoutes(app, config, deps.sessionStore);
+  registerSessionRoutes(app, config, deps.sessionStore, deps.sessionManager);
   registerSettingsRoutes(app, deps.settingsStore);
   registerMapTileRoutes(app, deps.tileService);
 
