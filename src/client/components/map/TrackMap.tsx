@@ -15,17 +15,20 @@ const CAR_ICON_SVG =
   '<polygon points="12,2 20,21 12,16 4,21" fill="#ff6b1a" stroke="#0a0c10" ' +
   'stroke-width="1.5" stroke-linejoin="round"/></svg>';
 
-type ViewMode = 'last-minute' | 'full';
+type ViewMode = 'live' | 'last-minute' | 'full';
+const LIVE_MS = 5_000;
 const LAST_MINUTE_MS = 60_000;
 
 /**
- * Slice the track path to whatever should be visible right now. In
- * "last-minute" mode this keeps only the points within LAST_MINUTE_MS of the
- * most recent sample (which is also the replay playhead during replay).
+ * Slice the track path to whatever should be visible right now. In "live" /
+ * "last-minute" mode this keeps only the points within the trailing window
+ * (LIVE_MS / LAST_MINUTE_MS) of the most recent sample, which is also the
+ * replay playhead during replay.
  */
 function visiblePath(path: TrackPath, mode: ViewMode): TrackPath {
   if (mode === 'full' || path.length === 0) return path;
-  const cutoff = path[path.length - 1][2] - LAST_MINUTE_MS;
+  const window = mode === 'live' ? LIVE_MS : LAST_MINUTE_MS;
+  const cutoff = path[path.length - 1][2] - window;
   // path is monotonically increasing in t — binary search the first kept index.
   let lo = 0;
   let hi = path.length;
@@ -46,8 +49,8 @@ export function TrackMap() {
   const [calibrating, setCalibrating] = useState(false);
   const [requested, setRequested] = useState(false);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('last-minute');
-  const viewModeRef = useRef<ViewMode>('last-minute');
+  const [viewMode, setViewMode] = useState<ViewMode>('live');
+  const viewModeRef = useRef<ViewMode>('live');
   viewModeRef.current = viewMode;
   const fittedRef = useRef(false);
   const lastFitRef = useRef(0);
@@ -117,11 +120,10 @@ export function TrackMap() {
       if (visible.length > 0) {
         line.setLatLngs(visible.map(([x, z]) => toLatLng(x, z)));
         const now = Date.now();
-        // Initial fit: do once when there's enough trace. In `full` mode keep
-        // re-fitting periodically so newly explored areas come into view; in
-        // `last-minute` mode we follow the car instead (see panInside below)
-        // and only re-fit when the user explicitly switches modes.
-        if (!fittedRef.current && visible.length > 4) {
+        // `live` follows the car directly (see below); other modes fit the
+        // trace once initially and `full` keeps re-fitting periodically so
+        // newly explored areas come into view.
+        if (mode !== 'live' && !fittedRef.current && visible.length > 4) {
           const bounds = line.getBounds();
           if (bounds.isValid()) {
             map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
@@ -141,10 +143,16 @@ export function TrackMap() {
       if (frame) {
         const carLatLng = toLatLng(frame.positionX, frame.positionZ);
         marker.setLatLng(carLatLng);
-        // Keep the car inside the viewport at all times when following the
-        // last minute of trace — fitBounds alone runs too rarely and the car
-        // visibly drifts off-screen between fits.
-        if (mode === 'last-minute' && fittedRef.current) {
+        if (mode === 'live') {
+          // Lock the car to the centre of the viewport.
+          if (!fittedRef.current) {
+            map.setView(carLatLng, 15, { animate: false });
+            fittedRef.current = true;
+          } else {
+            map.panTo(carLatLng, { animate: false });
+          }
+        } else if (mode === 'last-minute' && fittedRef.current) {
+          // Keep the car inside the viewport between periodic re-fits.
           map.panInside(carLatLng, { padding: [48, 48], animate: false });
         }
         const svg = marker.getElement()?.querySelector('svg');
@@ -205,9 +213,20 @@ export function TrackMap() {
         <div className="absolute right-2 top-2 z-[1000] flex items-center gap-1.5">
           <div className="flex overflow-hidden rounded border border-cockpit-edge bg-cockpit-panel/90 text-xs">
             <button
-              onClick={() => setViewMode('last-minute')}
-              title="Follow the last 60 seconds of the trace"
+              onClick={() => setViewMode('live')}
+              title="Keep the car centred on the map with a 5s stub trail"
               className={`px-2 py-1 ${
+                viewMode === 'live'
+                  ? 'bg-cockpit-accent font-semibold text-black'
+                  : 'text-slate-300 hover:bg-cockpit-bg'
+              }`}
+            >
+              Live
+            </button>
+            <button
+              onClick={() => setViewMode('last-minute')}
+              title="Follow the car with the last 60 seconds of trace"
+              className={`border-l border-cockpit-edge px-2 py-1 ${
                 viewMode === 'last-minute'
                   ? 'bg-cockpit-accent font-semibold text-black'
                   : 'text-slate-300 hover:bg-cockpit-bg'
