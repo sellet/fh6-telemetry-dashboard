@@ -228,6 +228,16 @@ rendering is best-effort against community-maintained tile servers; see
 [Notes & caveats](#notes--caveats) for the operator's responsibility around
 those tiles.
 
+### Built with AI, supervised by a bearded nerd
+
+In the spirit of full transparency: most of the code in this repository was
+written by an AI coding assistant, working under the close supervision of a
+bearded nerd who reviews every change, makes the architectural calls, runs
+the thing in anger, and is on the hook for anything that breaks. The AI
+drafts; the human steers, vetoes, and ships. So if something here is
+clever, the credit is shared — and if something is broken, blame the
+bearded one. 🧔
+
 ## License
 
 MIT
