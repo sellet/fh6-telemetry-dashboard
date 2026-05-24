@@ -92,15 +92,6 @@ export function SessionCard({
                   · {session.name}
                 </span>
               )}
-              {!editing && (
-                <button
-                  onClick={openEditor}
-                  title="Edit name, notes and tags"
-                  className="text-[11px] text-slate-500 hover:text-slate-200"
-                >
-                  ✎
-                </button>
-              )}
             </div>
             <div className="text-xs text-slate-500">{formatClockTime(session.startedAt)}</div>
             {!editing && tags.length > 0 && (
@@ -210,6 +201,14 @@ export function SessionCard({
           className="flex-1 rounded bg-cockpit-accent px-3 py-1.5 text-sm font-semibold text-black hover:bg-orange-400"
         >
           Replay
+        </button>
+        <button
+          onClick={openEditor}
+          disabled={editing}
+          title="Edit name, tags and notes"
+          className="rounded border border-cockpit-edge px-3 py-1.5 text-sm text-slate-200 hover:bg-cockpit-panel disabled:opacity-40"
+        >
+          Edit
         </button>
         {allowDelete && (
           <button
