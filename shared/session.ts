@@ -48,8 +48,17 @@ export type SessionEndReason =
 
 /** Maximum length of a user-supplied session display name. */
 export const SESSION_NAME_MAX_LENGTH = 64;
+/** Caps on the new tags / notes metadata. */
+export const SESSION_TAG_MAX_LENGTH = 32;
+export const SESSION_MAX_TAGS = 16;
+export const SESSION_NOTES_MAX_LENGTH = 2000;
+/** Length of the truncated notes preview carried on SessionSummary. */
+export const SESSION_NOTES_PREVIEW_LENGTH = 120;
 
-export const SESSION_SCHEMA_VERSION = 2;
+export const SESSION_SCHEMA_VERSION = 3;
+
+/** Half-open idle interval in milliseconds since the session's first frame. */
+export type IdleRange = [number, number];
 
 export interface SessionManifest {
   id: string;
@@ -60,6 +69,12 @@ export interface SessionManifest {
   kind?: SessionKind;
   /** Optional user-supplied display name (shown after the id in the list). */
   name?: string;
+  /** Free-form user tags. Normalised: trimmed, lowercase, deduped, capped. */
+  tags?: string[];
+  /** Free-form user notes. */
+  notes?: string;
+  /** Detected stopped-and-not-racing spans (relative to startedAt, in ms). */
+  idleRangesMs?: IdleRange[];
   createdBy: string;
   startedAt: string;
   endedAt: string | null;
@@ -78,6 +93,10 @@ export interface SessionSummary {
   status: SessionStatus;
   kind?: SessionKind;
   name?: string;
+  tags?: string[];
+  /** Truncated to SESSION_NOTES_PREVIEW_LENGTH for the list view. */
+  notes?: string;
+  hasIdleRanges?: boolean;
   startedAt: string;
   endedAt: string | null;
   durationMs: number;
@@ -86,6 +105,31 @@ export interface SessionSummary {
   maxRpm: number;
   distanceMeters: number;
   car: SessionCar;
+}
+
+export interface SessionMetaPatch {
+  name?: string;
+  tags?: string[];
+  notes?: string;
+}
+
+/** Normalise a tag list: trim, lowercase-collapse-whitespace, dedupe, cap. */
+export function normaliseTags(tags: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    if (typeof raw !== 'string') continue;
+    const t = raw.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, SESSION_TAG_MAX_LENGTH);
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+    if (out.length >= SESSION_MAX_TAGS) break;
+  }
+  return out;
+}
+
+export function normaliseNotes(notes: string): string {
+  return notes.trim().slice(0, SESSION_NOTES_MAX_LENGTH);
 }
 
 export function emptyStats(): SessionStats {

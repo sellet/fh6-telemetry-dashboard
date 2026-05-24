@@ -1,13 +1,30 @@
 import type { HealthResponse, ServerStatus } from '../../../shared/api';
-import type { SessionManifest, SessionSummary } from '../../../shared/session';
+import type { SessionManifest, SessionMetaPatch, SessionSummary } from '../../../shared/session';
 import type { MapSettings } from '../../../shared/mapDefaults';
 
 export type { MapSettings };
+
+export interface StorageInfo {
+  totalBytes: number;
+  sessionCount: number;
+  byKind: { race: number; freeRoam: number };
+  largest: Array<{ id: string; bytes: number }>;
+}
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} responded ${res.status}`);
   return (await res.json()) as T;
+}
+
+async function patchSession(id: string, patch: SessionMetaPatch): Promise<SessionManifest> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`failed to update session (${res.status})`);
+  return (await res.json()) as SessionManifest;
 }
 
 export const api = {
@@ -46,15 +63,12 @@ export const api = {
     if (!res.ok) throw new Error(`failed to cut recording (${res.status})`);
   },
 
-  async renameSession(id: string, name: string): Promise<SessionManifest> {
-    const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) throw new Error(`failed to rename session (${res.status})`);
-    return (await res.json()) as SessionManifest;
-  },
+  updateSession: (id: string, patch: SessionMetaPatch): Promise<SessionManifest> =>
+    patchSession(id, patch),
+
+  renameSession: (id: string, name: string): Promise<SessionManifest> => patchSession(id, { name }),
+
+  storage: () => getJson<StorageInfo>('/api/storage'),
 
   async mergeSessions(ids: string[], name?: string): Promise<SessionManifest> {
     const res = await fetch('/api/sessions/merge', {

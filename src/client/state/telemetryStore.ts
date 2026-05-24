@@ -16,6 +16,10 @@ export interface ReplayInfo {
   frameIndex: number;
   elapsedMs: number;
   totalMs: number;
+  /** Loaded from the session manifest on replay start. */
+  idleRangesMs?: Array<[number, number]>;
+  /** When on and an idle range is loaded, the player seeks past idle spans. */
+  skipIdle?: boolean;
 }
 
 export interface History {

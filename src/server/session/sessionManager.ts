@@ -11,6 +11,7 @@ import { isRacing, type TelemetryFrame } from '../../../shared/telemetry';
 import {
   SESSION_SCHEMA_VERSION,
   emptyStats,
+  type IdleRange,
   type SessionEndReason,
   type SessionKind,
   type SessionManifest,
@@ -19,6 +20,11 @@ import {
 } from '../../../shared/session';
 import { JsonlWriter } from './jsonlWriter';
 import { StatsAccumulator } from './statsAccumulator';
+
+/** Minimum span (ms) that qualifies as an idle range worth recording. */
+const IDLE_RANGE_MIN_MS = 3000;
+/** Speed threshold (m/s) below which we consider the car stopped. */
+const IDLE_SPEED_THRESHOLD = 1;
 
 interface ActiveSession {
   id: string;
@@ -29,6 +35,12 @@ interface ActiveSession {
   lastFrameTimeMs: number;
   firstFrame: TelemetryFrame;
   kind: SessionKind;
+  /** recvTime of the most recently seen frame (used to close open idle spans). */
+  lastFrameRecvTime: number;
+  /** Open idle span (relative ms since firstFrame), if currently idle. */
+  currentIdleStartMs: number | null;
+  /** Completed idle spans for this session. */
+  idleRangesMs: IdleRange[];
 }
 
 export interface RecordingStatus {
@@ -143,6 +155,28 @@ export class SessionManager {
       active.writer.write(frame);
       active.stats.update(frame);
       active.lastFrameTimeMs = Date.now();
+      this.trackIdle(active, frame);
+    }
+  }
+
+  /**
+   * Maintain the in-progress idle span for `active`. Race-kind sessions don't
+   * have meaningful idle to skip, so we only track free-roam. A "stopped"
+   * frame opens a span; resuming motion closes it — only spans lasting at
+   * least IDLE_RANGE_MIN_MS become recorded ranges.
+   */
+  private trackIdle(active: ActiveSession, frame: TelemetryFrame): void {
+    active.lastFrameRecvTime = frame.recvTime;
+    if (active.kind !== 'free-roam') return;
+    const elapsed = frame.recvTime - active.firstFrame.recvTime;
+    if (frame.speed < IDLE_SPEED_THRESHOLD) {
+      if (active.currentIdleStartMs === null) active.currentIdleStartMs = elapsed;
+      return;
+    }
+    if (active.currentIdleStartMs !== null) {
+      const start = active.currentIdleStartMs;
+      active.currentIdleStartMs = null;
+      if (elapsed - start >= IDLE_RANGE_MIN_MS) active.idleRangesMs.push([start, elapsed]);
     }
   }
 
@@ -184,6 +218,9 @@ export class SessionManager {
       lastFrameTimeMs: Date.now(),
       firstFrame,
       kind: kindFor(firstFrame),
+      lastFrameRecvTime: firstFrame.recvTime,
+      currentIdleStartMs: null,
+      idleRangesMs: [],
     };
     this.state = 'recording';
 
@@ -256,6 +293,14 @@ export class SessionManager {
       }
     }
 
+    // Close any still-open idle span using the last frame's timestamp.
+    if (active.currentIdleStartMs !== null) {
+      const start = active.currentIdleStartMs;
+      const end = active.lastFrameRecvTime - active.firstFrame.recvTime;
+      active.currentIdleStartMs = null;
+      if (end - start >= IDLE_RANGE_MIN_MS) active.idleRangesMs.push([start, end]);
+    }
+
     const stats = active.stats.snapshot();
     fs.writeFileSync(path.join(active.dir, 'stats.json'), JSON.stringify(stats, null, 2));
 
@@ -299,6 +344,7 @@ export class SessionManager {
       status,
       endReason,
       kind: active.kind,
+      idleRangesMs: active.idleRangesMs.length > 0 ? active.idleRangesMs : undefined,
       createdBy: 'fh6-telemetry-dashboard',
       startedAt: active.startedAt.toISOString(),
       endedAt: endedAt ? endedAt.toISOString() : null,

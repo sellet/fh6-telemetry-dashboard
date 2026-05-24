@@ -4,6 +4,9 @@ import type { Logger } from '../../logger';
 import type { SessionStore } from '../../session/sessionStore';
 import type { SessionManager } from '../../session/sessionManager';
 import { mergeSessions } from '../../session/mergeSessions';
+import type { SessionMetaPatch } from '../../../../shared/session';
+
+const ALLOWED_PATCH_KEYS = new Set(['name', 'tags', 'notes']);
 
 export function registerSessionRoutes(
   app: FastifyInstance,
@@ -13,6 +16,8 @@ export function registerSessionRoutes(
   manager: SessionManager,
 ): void {
   app.get('/api/sessions', () => store.list(config.maxSessionListItems));
+
+  app.get('/api/storage', () => store.storage());
 
   // End the current recording immediately; the next telemetry frame starts a
   // fresh session. No-op when nothing is recording.
@@ -54,17 +59,41 @@ export function registerSessionRoutes(
     return manifest;
   });
 
-  app.patch<{ Params: { id: string }; Body: { name?: unknown } }>(
-    '/api/sessions/:id',
-    async (req, reply) => {
-      const name = typeof req.body?.name === 'string' ? req.body.name : '';
-      const updated = await store.rename(req.params.id, name);
-      if (!updated) {
-        return reply.code(404).send({ error: 'session not found' });
+  app.patch<{
+    Params: { id: string };
+    Body: { name?: unknown; tags?: unknown; notes?: unknown } | null;
+  }>('/api/sessions/:id', async (req, reply) => {
+    const body = req.body ?? {};
+    for (const key of Object.keys(body)) {
+      if (!ALLOWED_PATCH_KEYS.has(key)) {
+        return reply.code(400).send({ error: `unknown field: ${key}` });
       }
-      return updated;
-    },
-  );
+    }
+    const patch: SessionMetaPatch = {};
+    if ('name' in body) {
+      if (typeof body.name !== 'string') {
+        return reply.code(400).send({ error: 'name must be a string' });
+      }
+      patch.name = body.name;
+    }
+    if ('tags' in body) {
+      if (!Array.isArray(body.tags) || body.tags.some((t) => typeof t !== 'string')) {
+        return reply.code(400).send({ error: 'tags must be an array of strings' });
+      }
+      patch.tags = body.tags as string[];
+    }
+    if ('notes' in body) {
+      if (typeof body.notes !== 'string') {
+        return reply.code(400).send({ error: 'notes must be a string' });
+      }
+      patch.notes = body.notes;
+    }
+    const updated = await store.updateMeta(req.params.id, patch);
+    if (!updated) {
+      return reply.code(404).send({ error: 'session not found' });
+    }
+    return updated;
+  });
 
   app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
     if (!config.allowDeleteSessions) {

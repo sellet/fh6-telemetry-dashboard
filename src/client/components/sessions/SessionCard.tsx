@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { SessionSummary } from '../../../../shared/session';
+import type { SessionMetaPatch, SessionSummary } from '../../../../shared/session';
 import { CAR_CLASSES } from '../../../../shared/telemetry';
 import { carDisplayName, formatClockTime, formatDuration, MPS_TO_KMH } from '../../lib/format';
 
@@ -11,7 +11,8 @@ interface SessionCardProps {
   onToggleSelect: (id: string) => void;
   onReplay: (id: string) => void;
   onDelete: (id: string) => void;
-  onRename: (id: string, name: string) => Promise<void>;
+  onUpdate: (id: string, patch: SessionMetaPatch) => Promise<void>;
+  onTagClick?: (tag: string) => void;
 }
 
 export function SessionCard({
@@ -22,26 +23,41 @@ export function SessionCard({
   onToggleSelect,
   onReplay,
   onDelete,
-  onRename,
+  onUpdate,
+  onTagClick,
 }: SessionCardProps) {
   const carClass = CAR_CLASSES[session.car.class] ?? `Class ${session.car.class}`;
   const topKmh = Math.round(session.topSpeed * MPS_TO_KMH);
   const carName = carDisplayName(session.car.ordinal);
   const isRace = session.kind === 'race';
+  const tags = session.tags ?? [];
+  const notes = session.notes ?? '';
 
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(session.name ?? '');
+  const [draftName, setDraftName] = useState(session.name ?? '');
+  const [draftNotes, setDraftNotes] = useState(notes);
+  const [draftTags, setDraftTags] = useState(tags.join(', '));
   const [saving, setSaving] = useState(false);
 
   const openEditor = (): void => {
-    setDraft(session.name ?? '');
+    setDraftName(session.name ?? '');
+    setDraftNotes(notes);
+    setDraftTags(tags.join(', '));
     setEditing(true);
   };
   const cancelEdit = (): void => setEditing(false);
   const commitEdit = async (): Promise<void> => {
     setSaving(true);
     try {
-      await onRename(session.id, draft);
+      const tagList = draftTags
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      await onUpdate(session.id, {
+        name: draftName,
+        notes: draftNotes,
+        tags: tagList,
+      });
       setEditing(false);
     } catch (err) {
       console.error(err);
@@ -79,7 +95,7 @@ export function SessionCard({
               {!editing && (
                 <button
                   onClick={openEditor}
-                  title={session.name ? 'Rename this session' : 'Give this session a name'}
+                  title="Edit name, notes and tags"
                   className="text-[11px] text-slate-500 hover:text-slate-200"
                 >
                   ✎
@@ -87,35 +103,18 @@ export function SessionCard({
               )}
             </div>
             <div className="text-xs text-slate-500">{formatClockTime(session.startedAt)}</div>
-
-            {editing && (
-              <div className="mt-1.5 flex items-center gap-1.5">
-                <input
-                  type="text"
-                  autoFocus
-                  value={draft}
-                  maxLength={64}
-                  placeholder="Session name"
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void commitEdit();
-                    else if (e.key === 'Escape') cancelEdit();
-                  }}
-                  className="w-48 rounded border border-cockpit-edge bg-cockpit-panel px-2 py-0.5 text-xs text-slate-100 focus:border-cockpit-accent focus:outline-none"
-                />
-                <button
-                  onClick={() => void commitEdit()}
-                  disabled={saving}
-                  className="rounded bg-cockpit-accent px-2 py-0.5 text-[11px] font-semibold text-black hover:bg-orange-400 disabled:opacity-40"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={cancelEdit}
-                  className="rounded border border-cockpit-edge px-2 py-0.5 text-[11px] text-slate-300 hover:bg-cockpit-panel"
-                >
-                  Cancel
-                </button>
+            {!editing && tags.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {tags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => onTagClick?.(tag)}
+                    title={onTagClick ? `Filter by tag "${tag}"` : tag}
+                    className="rounded-full border border-cockpit-edge bg-cockpit-panel px-2 py-0.5 text-[10px] text-slate-300 hover:border-cockpit-accent hover:text-cockpit-accent"
+                  >
+                    #{tag}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -126,6 +125,14 @@ export function SessionCard({
               Race
             </span>
           )}
+          {session.hasIdleRanges && (
+            <span
+              title="This session contains stopped/idle spans"
+              className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] text-sky-200"
+            >
+              ⏸ idle
+            </span>
+          )}
           {session.status !== 'completed' && (
             <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300">
               {session.status}
@@ -134,12 +141,68 @@ export function SessionCard({
         </div>
       </div>
 
+      {editing && (
+        <div className="mt-2 grid gap-1.5 rounded border border-cockpit-edge bg-cockpit-panel p-2">
+          <label className="text-[10px] uppercase text-slate-500">Name</label>
+          <input
+            type="text"
+            autoFocus
+            value={draftName}
+            maxLength={64}
+            placeholder="Session name"
+            onChange={(e) => setDraftName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') cancelEdit();
+            }}
+            className="rounded border border-cockpit-edge bg-cockpit-bg px-2 py-0.5 text-xs text-slate-100 focus:border-cockpit-accent focus:outline-none"
+          />
+          <label className="text-[10px] uppercase text-slate-500">Tags (comma separated)</label>
+          <input
+            type="text"
+            value={draftTags}
+            placeholder="e.g. baja, sunset, hot-lap"
+            onChange={(e) => setDraftTags(e.target.value)}
+            className="rounded border border-cockpit-edge bg-cockpit-bg px-2 py-0.5 text-xs text-slate-100 focus:border-cockpit-accent focus:outline-none"
+          />
+          <label className="text-[10px] uppercase text-slate-500">Notes</label>
+          <textarea
+            value={draftNotes}
+            maxLength={2000}
+            rows={3}
+            placeholder="What was this session about?"
+            onChange={(e) => setDraftNotes(e.target.value)}
+            className="rounded border border-cockpit-edge bg-cockpit-bg px-2 py-1 text-xs text-slate-100 focus:border-cockpit-accent focus:outline-none"
+          />
+          <div className="mt-1 flex items-center gap-1.5">
+            <button
+              onClick={() => void commitEdit()}
+              disabled={saving}
+              className="rounded bg-cockpit-accent px-3 py-0.5 text-[11px] font-semibold text-black hover:bg-orange-400 disabled:opacity-40"
+            >
+              Save
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="rounded border border-cockpit-edge px-3 py-0.5 text-[11px] text-slate-300 hover:bg-cockpit-bg"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-2 grid grid-cols-4 gap-2 text-center">
         <Metric label="Duration" value={formatDuration(session.durationMs)} />
         <Metric label="Frames" value={session.frameCount.toLocaleString()} />
         <Metric label="Top" value={`${topKmh}`} suffix="km/h" />
         <Metric label="Class" value={carClass} />
       </div>
+
+      {!editing && notes && (
+        <p className="mt-2 line-clamp-2 whitespace-pre-line text-xs text-slate-400" title={notes}>
+          {notes}
+        </p>
+      )}
 
       <div className="mt-3 flex gap-2">
         <button

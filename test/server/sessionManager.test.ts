@@ -198,6 +198,73 @@ describe('SessionManager', () => {
     expect(manifests[1].car.ordinal).toBe(200);
   });
 
+  it('records idle ranges for free-roam sessions when the car is stopped', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    // t=0: start driving in free-roam. Then stop for 5 s, drive 2 s, stop 4 s,
+    // drive 1 s — expect two idle ranges roughly [1000, 6000] and [8000, 12000].
+    const t0 = 1_000_000;
+    emit(bus, { isRaceOn: 1, speed: 20 }, t0);
+    emit(bus, { isRaceOn: 1, speed: 0 }, t0 + 1000);
+    emit(bus, { isRaceOn: 1, speed: 0 }, t0 + 3000);
+    emit(bus, { isRaceOn: 1, speed: 0 }, t0 + 6000);
+    emit(bus, { isRaceOn: 1, speed: 20 }, t0 + 6500);
+    emit(bus, { isRaceOn: 1, speed: 30 }, t0 + 8000);
+    emit(bus, { isRaceOn: 1, speed: 0 }, t0 + 8500);
+    emit(bus, { isRaceOn: 1, speed: 0 }, t0 + 12_000);
+    emit(bus, { isRaceOn: 1, speed: 25 }, t0 + 13_000);
+    await manager.shutdown();
+
+    const dir = path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]);
+    const manifest = readManifest(dir);
+    expect(manifest.kind).toBe('free-roam');
+    expect(manifest.idleRangesMs).toBeDefined();
+    expect(manifest.idleRangesMs).toHaveLength(2);
+    const [r1, r2] = manifest.idleRangesMs!;
+    expect(r1[1] - r1[0]).toBeGreaterThanOrEqual(3000);
+    expect(r2[1] - r2[0]).toBeGreaterThanOrEqual(3000);
+  });
+
+  it('does not record idle ranges shorter than the minimum threshold', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    const t0 = 2_000_000;
+    emit(bus, { isRaceOn: 1, speed: 20 }, t0);
+    emit(bus, { isRaceOn: 1, speed: 0 }, t0 + 1000);
+    emit(bus, { isRaceOn: 1, speed: 0 }, t0 + 2500); // < 3 s stopped
+    emit(bus, { isRaceOn: 1, speed: 20 }, t0 + 3000);
+    await manager.shutdown();
+
+    const dir = path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]);
+    const manifest = readManifest(dir);
+    expect(manifest.idleRangesMs).toBeUndefined();
+  });
+
+  it('does not record idle ranges for race-kind sessions', async () => {
+    const config = makeConfig();
+    const bus = new TelemetryBus();
+    const manager = new SessionManager(config, silentLogger, bus);
+    manager.start();
+
+    const t0 = 3_000_000;
+    emit(bus, { isRaceOn: 1, lapNumber: 1, racePosition: 2, speed: 60 }, t0);
+    emit(bus, { isRaceOn: 1, lapNumber: 1, racePosition: 2, speed: 0 }, t0 + 1000);
+    emit(bus, { isRaceOn: 1, lapNumber: 1, racePosition: 2, speed: 0 }, t0 + 6000);
+    emit(bus, { isRaceOn: 1, lapNumber: 1, racePosition: 2, speed: 50 }, t0 + 7000);
+    await manager.shutdown();
+
+    const dir = path.join(config.sessionsDir, fs.readdirSync(config.sessionsDir)[0]);
+    const manifest = readManifest(dir);
+    expect(manifest.kind).toBe('race');
+    expect(manifest.idleRangesMs).toBeUndefined();
+  });
+
   it('cut() finalizes the active session and lets the next frame start a fresh one', async () => {
     const config = makeConfig();
     const bus = new TelemetryBus();
