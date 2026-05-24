@@ -37,7 +37,7 @@ export function Dashboard() {
 
   return (
     <div className="relative mx-auto max-w-[1600px] p-2">
-      <div className="grid grid-cols-2 items-stretch gap-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 items-stretch gap-2 lg:grid-cols-[200px_minmax(0,1.6fr)_200px_minmax(0,1fr)_200px]">
         <div className="flex justify-center">
           <Tachometer />
         </div>

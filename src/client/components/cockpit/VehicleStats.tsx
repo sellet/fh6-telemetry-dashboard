@@ -7,7 +7,9 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded bg-cockpit-bg p-1.5">
       <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="font-mono text-sm font-semibold text-slate-100">{value}</div>
+      <div className="truncate whitespace-nowrap font-mono text-sm font-semibold text-slate-100">
+        {value}
+      </div>
     </div>
   );
 }
