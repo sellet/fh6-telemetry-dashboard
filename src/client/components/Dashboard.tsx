@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useTelemetryStore } from '../state/telemetryStore';
 import { Tachometer } from './cockpit/Tachometer';
 import { Speedometer } from './cockpit/Speedometer';
@@ -13,8 +14,6 @@ import { TrackMap } from './map/TrackMap';
 import { MPS_TO_KMH } from '../lib/format';
 
 function WaitingOverlay({ message }: { message: string }) {
-  // Informational only — `pointer-events-none` keeps the map and its controls
-  // usable underneath while there is no telemetry.
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-cockpit-bg/70 pt-24">
       <div className="rounded-lg border border-cockpit-edge bg-cockpit-panel/90 px-6 py-4 text-center">
@@ -30,6 +29,45 @@ export function Dashboard() {
   const mode = useTelemetryStore((s) => s.mode);
   const receiving = useTelemetryStore((s) => s.status?.udp.receivingPackets ?? false);
   const history = useTelemetryStore((s) => s.history);
+
+  // --- LÓGICA DO SCREEN WAKE LOCK (Impede a tela de apagar) ---
+  useEffect(() => {
+    let wakeLock: any = null;
+
+    const requestWakeLock = async () => {
+      try {
+        const nav = navigator as any;
+        if ('wakeLock' in nav) {
+          wakeLock = await nav.wakeLock.request('screen');
+          console.log('Wake Lock ativado! A tela permanecerá acesa.');
+        }
+      } catch (err) {
+        console.error('Erro ao ativar Wake Lock (a tela pode apagar):', err);
+      }
+    };
+
+    // Solicita o bloqueio assim que o Dashboard é aberto
+    requestWakeLock();
+
+    // Se o usuário minimizar o navegador ou trocar de aba, o SO pode derrubar o Wake Lock.
+    // Isso garante que ele seja reativado assim que a aba voltar a ficar visível.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Limpeza ao fechar o componente
+    return () => {
+      if (wakeLock !== null) {
+        wakeLock.release().catch(console.error);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+  // -------------------------------------------------------------
 
   let overlay: string | null = null;
   if (connection !== 'open') overlay = 'Connecting to server…';

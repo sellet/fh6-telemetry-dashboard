@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTelemetryStore } from '../../state/telemetryStore';
 import { Panel } from '../common/Panel';
 import { tempColor } from './tireColors';
@@ -81,13 +82,23 @@ interface WheelProps {
   slip: number;
   wear?: number;
   align: 'left' | 'right';
+  tempUnit: 'C' | 'F'; // Adicionado para receber a unidade selecionada
 }
 
-function WheelReadout({ label, temp, travel, slip, wear, align }: WheelProps) {
+function WheelReadout({ label, temp, travel, slip, wear, align, tempUnit }: WheelProps) {
   const t = Math.min(1, Math.max(0, travel));
   const slipPct = Math.min(100, Math.max(0, slip * 100));
   const wearPct = wear !== undefined ? Math.round(wear * 100) : null;
   const isRight = align === 'right';
+
+  // Faz o cálculo dinâmico baseado no botão selecionado
+  const formatTemp = (farenheit: number) => {
+    if (farenheit <= 0) return '--';
+    if (tempUnit === 'C') {
+      return `${((farenheit - 32) * (5 / 9)).toFixed(0)}°C`;
+    }
+    return `${farenheit.toFixed(0)}°F`;
+  };
 
   return (
     <div
@@ -105,7 +116,7 @@ function WheelReadout({ label, temp, travel, slip, wear, align }: WheelProps) {
           className="font-mono text-2xl font-bold leading-none"
           style={{ color: tempColor(temp), fontVariantNumeric: 'tabular-nums' }}
         >
-          {temp > 0 ? `${temp.toFixed(0)}°` : '--'}
+          {formatTemp(temp)}
         </span>
         {isRight && (
           <span className="text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
@@ -147,9 +158,34 @@ function WheelReadout({ label, temp, travel, slip, wear, align }: WheelProps) {
 
 export function TireSuspensionPanel() {
   const f = useTelemetryStore((s) => s.frame);
+  const [tempUnit, setTempUnit] = useState<'C' | 'F'>('C'); // Estado para controlar a unidade
 
   return (
     <Panel title="Tires & Suspension" className="flex h-full flex-col">
+      {/* Botões Seletores de Temperatura */}
+      <div className="flex justify-end gap-1 mb-2 px-1">
+        <button
+          onClick={() => setTempUnit('C')}
+          className={`px-2.5 py-0.5 text-[10px] rounded font-mono font-bold transition-all ${
+            tempUnit === 'C'
+              ? 'bg-cockpit-accent text-white shadow-sm'
+              : 'bg-cockpit-edge/40 text-slate-400 hover:bg-cockpit-edge'
+          }`}
+        >
+          °C
+        </button>
+        <button
+          onClick={() => setTempUnit('F')}
+          className={`px-2.5 py-0.5 text-[10px] rounded font-mono font-bold transition-all ${
+            tempUnit === 'F'
+              ? 'bg-cockpit-accent text-white shadow-sm'
+              : 'bg-cockpit-edge/40 text-slate-400 hover:bg-cockpit-edge'
+          }`}
+        >
+          °F
+        </button>
+      </div>
+
       <div className="grid flex-1 grid-cols-1 items-center gap-2 lg:grid-cols-[1fr_88px_1fr] lg:grid-rows-2">
         <WheelReadout
           align="right"
@@ -158,6 +194,7 @@ export function TireSuspensionPanel() {
           travel={f?.normalizedSuspensionTravelFl ?? 0}
           slip={f?.tireCombinedSlipFl ?? 0}
           wear={f?.tireWearFl}
+          tempUnit={tempUnit}
         />
         <div className="hidden lg:col-start-2 lg:row-span-2 lg:block lg:self-stretch lg:py-1">
           <CarSilhouette
@@ -174,6 +211,7 @@ export function TireSuspensionPanel() {
           travel={f?.normalizedSuspensionTravelFr ?? 0}
           slip={f?.tireCombinedSlipFr ?? 0}
           wear={f?.tireWearFr}
+          tempUnit={tempUnit}
         />
         <WheelReadout
           align="right"
@@ -182,6 +220,7 @@ export function TireSuspensionPanel() {
           travel={f?.normalizedSuspensionTravelRl ?? 0}
           slip={f?.tireCombinedSlipRl ?? 0}
           wear={f?.tireWearRl}
+          tempUnit={tempUnit}
         />
         <WheelReadout
           align="left"
@@ -190,6 +229,7 @@ export function TireSuspensionPanel() {
           travel={f?.normalizedSuspensionTravelRr ?? 0}
           slip={f?.tireCombinedSlipRr ?? 0}
           wear={f?.tireWearRr}
+          tempUnit={tempUnit}
         />
       </div>
     </Panel>

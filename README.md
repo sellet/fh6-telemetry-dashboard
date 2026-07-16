@@ -4,6 +4,16 @@
 
 # Forza Horizon 6 Telemetry Dashboard
 
+> **Note:** This is a customized fork of the awesome original project by [acaranta](https://github.com/acaranta/fh6-telemetry-dashboard). 
+> 
+> **Custom Features Added:**
+> - Interactive UI toggles for Metric/Imperial units (Celsius/Fahrenheit, kW/HP).
+> - Automated Docker build script to fetch the latest FH6 Car IDs dynamically from a GitHub Gist.
+> - Dynamic UI Sync button to update car names on the fly without rebuilding.
+> - Fixed vehicle class mapping (S3 corrected to R).
+> - Added Drivetrain colored badges (AWD, RWD, FWD).
+> - Integrated Screen Wake Lock API to prevent the dashboard from dimming/sleeping during races.
+
 A self-hosted, Dockerized dashboard for **Forza Horizon 6**. It receives the
 game's "Data Out" UDP telemetry, shows it live in a racing-cockpit web
 dashboard, records every driving session to disk, and replays recorded

@@ -145,7 +145,7 @@ export const CAR_CLASSES: Record<number, string> = {
   3: 'A',
   4: 'S1',
   5: 'S2',
-  6: 'S3',
+  6: 'R',
   7: 'X',
 };
 

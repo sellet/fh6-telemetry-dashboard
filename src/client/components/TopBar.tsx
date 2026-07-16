@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTelemetryStore } from '../state/telemetryStore';
 import { api } from '../lib/api';
 import { ConnectionBadge } from './common/ConnectionBadge';
@@ -12,6 +12,32 @@ export function TopBar({ onOpenSessions }: TopBarProps) {
   const recording = useTelemetryStore((s) => s.status?.recording.active ?? false);
   const replaySessionId = useTelemetryStore((s) => s.replay.sessionId);
   const [cutting, setCutting] = useState(false);
+
+  // --- Lógica de Full Screen ---
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    if (!document.fullscreenElement) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch (err) {
+        console.error('Error attempting to enable full-screen mode:', err);
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+  // -----------------------------
 
   const handleCut = async (): Promise<void> => {
     setCutting(true);
@@ -47,6 +73,26 @@ export function TopBar({ onOpenSessions }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-4">
+        
+        {/* Botão de Full Screen */}
+        <button
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
+          title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
+          className="text-slate-400 transition-colors hover:text-slate-100"
+        >
+          {isFullscreen ? (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3 3m12 6V4.5m0 4.5h4.5M15 9l6-6M9 15v4.5M9 15H4.5m4.5 0l-6 6m12-6v4.5m0-4.5h4.5m-4.5 0l6 6" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
+            </svg>
+          )}
+        </button>
+
+        {/* Link do GitHub */}
         <a
           href="https://github.com/acaranta/fh6-telemetry-dashboard"
           target="_blank"

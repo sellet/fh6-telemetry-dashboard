@@ -7,9 +7,20 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# 1. Copia as configurações do projeto
 COPY tsconfig.json vite.config.ts tailwind.config.js postcss.config.js ./
+
+# 2. Copia as pastas de código-fonte originais para o contêiner
 COPY shared ./shared
 COPY src ./src
+
+# 3. Copia o script atualizador para dentro do contêiner
+COPY update-fh6-cars.mjs ./
+
+# 4. Executa o script (ele vai ler a pasta shared copiada e reescrever o carLookup.ts com os dados novos)
+RUN node update-fh6-cars.mjs
+
+# 5. Compila o projeto TypeScript com a lista de carros já atualizada
 RUN npm run build
 
 # --- runtime stage: slim image with production dependencies only ---
